@@ -28,13 +28,16 @@ function buildCsvUrl(sheetName) {
 export async function fetchAllDailyRows(months) {
   const allRows = [];
 
-  for (const month of months) {
-    const url = buildCsvUrl(month.sheetName);
+for (const month of months) {
+  const url = buildCsvUrl(month.sheetName);
 
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      throw new Error(`Erro ao baixar dados de ${month.label}`);
-    }
+  console.log('URL fetch', month.label, url); // <--- ADD
+
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    console.error('Status fetch', month.label, resp.status, resp.statusText);
+    throw new Error(`Erro ao baixar dados de ${month.label}`);
+  }
 
     const csv = await resp.text();
 
