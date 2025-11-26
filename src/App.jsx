@@ -53,15 +53,63 @@ function App() {
         setErro(null);
 
         const data = await fetchAllDailyRows(MONTHS);
-        setRows(data);
 
-        if (data.length > 0) {
-          const first = data[0].date;
-          const last = data[data.length - 1].date;
-          setMinDate(first);
-          setMaxDate(last);
-          setStartDate(first);
-          setEndDate(last);
+        // === 1) Limitar os dados até hoje ===
+        const hoje = new Date();
+        const hojeMidnight = new Date(
+          hoje.getFullYear(),
+          hoje.getMonth(),
+          hoje.getDate(),
+          0,
+          0,
+          0,
+          0,
+        );
+
+        // joga fora qualquer linha com data futura (ex.: 01/12 se hoje for 26/11)
+        const filtrado = data.filter((r) => r.date <= hojeMidnight);
+
+        setRows(filtrado);
+
+        if (filtrado.length === 0) {
+          setMinDate(null);
+          setMaxDate(null);
+          setStartDate(null);
+          setEndDate(null);
+          return;
+        }
+
+        // === 2) Min para o calendário = primeira data da base ===
+        const overallMin = filtrado[0].date;
+
+        // Max para o calendário = HOJE (não passa disso)
+        const calendarioMax = hojeMidnight;
+
+        setMinDate(overallMin);
+        setMaxDate(calendarioMax);
+
+        // === 3) Seleção inicial = mês atual ===
+        const anoAtual = hojeMidnight.getFullYear();
+        const mesAtual = hojeMidnight.getMonth(); // 0-11
+
+        const linhasMesAtual = filtrado.filter(
+          (r) =>
+            r.date.getFullYear() === anoAtual &&
+            r.date.getMonth() === mesAtual,
+        );
+
+        if (linhasMesAtual.length > 0) {
+          // do primeiro dia do mês atual até o último dia disponível (no máximo hoje)
+          const inicioMes = linhasMesAtual[0].date;
+          const fimMes = linhasMesAtual[linhasMesAtual.length - 1].date;
+
+          setStartDate(inicioMes);
+          setEndDate(fimMes);
+        } else {
+          // se não tiver dados do mês atual (caso raro), usa o range completo disponível
+          const fimBase = filtrado[filtrado.length - 1].date;
+          setStartDate(overallMin);
+          setEndDate(fimBase);
         }
       } catch (e) {
         console.error(e);
@@ -76,10 +124,10 @@ function App() {
 
   // Aplica filtro de período
   const rowsFiltradas = useMemo(() => {
-    if (!rows.length) return [];
+    if (!rows.length || !startDate || !endDate) return [];
     return rows.filter((r) => {
-      if (startDate && r.date < startDate) return false;
-      if (endDate && r.date > endDate) return false;
+      if (r.date < startDate) return false;
+      if (r.date > endDate) return false;
       return true;
     });
   }, [rows, startDate, endDate]);
@@ -184,7 +232,7 @@ function App() {
       <main className={`main ${sidebarCollapsed ? 'main--wide' : ''}`}>
         <Topbar
           onOpenMobileMenu={() =>
-            setSidebarMobileOpen((prev) => !prev) // <<< TOGGLE: abre e fecha
+            setSidebarMobileOpen((prev) => !prev) // abre/fecha hambúrguer no mobile
           }
         />
 
