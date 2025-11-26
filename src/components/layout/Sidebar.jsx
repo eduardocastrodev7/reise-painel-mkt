@@ -7,9 +7,36 @@ function ItemIcon({ id }) {
   if (id === 'overview') {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="10" width="4" height="11" rx="1.5" stroke={stroke} fill="none" strokeWidth="1.5" />
-        <rect x="10" y="5" width="4" height="16" rx="1.5" stroke={stroke} fill="none" strokeWidth="1.5" />
-        <rect x="17" y="2" width="4" height="19" rx="1.5" stroke={stroke} fill="none" strokeWidth="1.5" />
+        <rect
+          x="3"
+          y="10"
+          width="4"
+          height="11"
+          rx="1.5"
+          stroke={stroke}
+          fill="none"
+          strokeWidth="1.5"
+        />
+        <rect
+          x="10"
+          y="5"
+          width="4"
+          height="16"
+          rx="1.5"
+          stroke={stroke}
+          fill="none"
+          strokeWidth="1.5"
+        />
+        <rect
+          x="17"
+          y="2"
+          width="4"
+          height="19"
+          rx="1.5"
+          stroke={stroke}
+          fill="none"
+          strokeWidth="1.5"
+        />
       </svg>
     );
   }
@@ -17,7 +44,14 @@ function ItemIcon({ id }) {
   if (id === 'crm') {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="8" r="3.5" stroke={stroke} fill="none" strokeWidth="1.5" />
+        <circle
+          cx="12"
+          cy="8"
+          r="3.5"
+          stroke={stroke}
+          fill="none"
+          strokeWidth="1.5"
+        />
         <path
           d="M5 19.5C6.2 16.5 8.8 15 12 15s5.8 1.5 7 4.5"
           stroke={stroke}
@@ -100,8 +134,8 @@ export function Sidebar({
       }
     >
       <div className="sidebar-header">
+        {/* LOGO – sempre visível */}
         <div className="sidebar-logo-mark">
-          {/* agora em PNG */}
           <img
             src="/logo-reise.png"
             alt="Reise"
@@ -109,6 +143,7 @@ export function Sidebar({
           />
         </div>
 
+        {/* Texto some quando colapsado */}
         {!collapsed && (
           <div className="sidebar-logo-text">
             <span className="logo-title">Reise</span>
@@ -116,7 +151,7 @@ export function Sidebar({
           </div>
         )}
 
-        {/* botão de recolher (desktop) */}
+        {/* Botão de recolher/expandir (hamburger) */}
         <button
           type="button"
           className="sidebar-toggle"

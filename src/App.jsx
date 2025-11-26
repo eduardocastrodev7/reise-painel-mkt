@@ -45,7 +45,54 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
 
-  // Carrega todos os meses da planilha
+  const [darkMode, setDarkMode] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
+
+  // ---------- HELPERS DE LAYOUT ----------
+
+  // abre/fecha menu mobile (hambúrguer do topo)
+  const toggleMobileMenu = () => {
+    // se estiver em modo apresentação, não faz nada
+    if (presentationMode) return;
+    setSidebarMobileOpen((prev) => !prev);
+  };
+
+  // botão hamburguer DENTRO da sidebar
+  const handleSidebarToggle = () => {
+    if (presentationMode) return;
+
+    if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+      // mobile: abre/fecha o menu lateral
+      setSidebarMobileOpen((prev) => !prev);
+    } else {
+      // desktop: colapsa/expande a barra
+      setSidebarCollapsed((prev) => !prev);
+    }
+  };
+
+  const handleChangeSection = (id) => {
+    setSection(id);
+    // no mobile, trocar de visão fecha o menu
+    setSidebarMobileOpen(false);
+  };
+
+  const handleToggleDarkMode = () => {
+    setDarkMode((prev) => !prev);
+  };
+
+  const handleTogglePresentationMode = () => {
+    setPresentationMode((prev) => {
+      const next = !prev;
+      if (next) {
+        // ao entrar em modo apresentação, garante que o menu mobile feche
+        setSidebarMobileOpen(false);
+      }
+      return next;
+    });
+  };
+
+  // ---------- CARREGAR DADOS ----------
+
   useEffect(() => {
     async function carregar() {
       try {
@@ -54,7 +101,6 @@ function App() {
 
         const data = await fetchAllDailyRows(MONTHS);
 
-        // === 1) Limitar os dados até hoje ===
         const hoje = new Date();
         const hojeMidnight = new Date(
           hoje.getFullYear(),
@@ -66,7 +112,6 @@ function App() {
           0,
         );
 
-        // joga fora qualquer linha com data futura (ex.: 01/12 se hoje for 26/11)
         const filtrado = data.filter((r) => r.date <= hojeMidnight);
 
         setRows(filtrado);
@@ -79,18 +124,14 @@ function App() {
           return;
         }
 
-        // === 2) Min para o calendário = primeira data da base ===
         const overallMin = filtrado[0].date;
-
-        // Max para o calendário = HOJE (não passa disso)
         const calendarioMax = hojeMidnight;
 
         setMinDate(overallMin);
         setMaxDate(calendarioMax);
 
-        // === 3) Seleção inicial = mês atual ===
         const anoAtual = hojeMidnight.getFullYear();
-        const mesAtual = hojeMidnight.getMonth(); // 0-11
+        const mesAtual = hojeMidnight.getMonth();
 
         const linhasMesAtual = filtrado.filter(
           (r) =>
@@ -99,14 +140,11 @@ function App() {
         );
 
         if (linhasMesAtual.length > 0) {
-          // do primeiro dia do mês atual até o último dia disponível (no máximo hoje)
           const inicioMes = linhasMesAtual[0].date;
           const fimMes = linhasMesAtual[linhasMesAtual.length - 1].date;
-
           setStartDate(inicioMes);
           setEndDate(fimMes);
         } else {
-          // se não tiver dados do mês atual (caso raro), usa o range completo disponível
           const fimBase = filtrado[filtrado.length - 1].date;
           setStartDate(overallMin);
           setEndDate(fimBase);
@@ -122,17 +160,15 @@ function App() {
     carregar();
   }, []);
 
-  // Aplica filtro de período
+  // ---------- FILTRAR POR PERÍODO ----------
+
   const rowsFiltradas = useMemo(() => {
     if (!rows.length || !startDate || !endDate) return [];
-    return rows.filter((r) => {
-      if (r.date < startDate) return false;
-      if (r.date > endDate) return false;
-      return true;
-    });
+    return rows.filter((r) => r.date >= startDate && r.date <= endDate);
   }, [rows, startDate, endDate]);
 
-  // Calcula KPIs do período
+  // ---------- MÉTRICAS ----------
+
   const metrics = useMemo(() => {
     if (!rowsFiltradas.length) {
       return {
@@ -204,36 +240,43 @@ function App() {
     };
   }, [rowsFiltradas]);
 
-  return (
-    <div className="app-root">
-      {/* Sidebar (desktop + mobile) */}
-      <Sidebar
-        section={section}
-        onChangeSection={(id) => {
-          setSection(id);
-          setSidebarMobileOpen(false); // fecha menu no mobile ao clicar
-        }}
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={() =>
-          setSidebarCollapsed((prev) => !prev)
-        }
-        mobileOpen={sidebarMobileOpen}
-      />
+  // ---------- RENDER ----------
 
-      {/* Overlay pro mobile quando menu estiver aberto */}
-      {sidebarMobileOpen && (
+  return (
+    <div
+      className={
+        'app-root ' +
+        (darkMode ? 'theme-dark ' : '') +
+        (presentationMode ? 'presentation-mode' : '')
+      }
+    >
+      {/* SIDEBAR (não aparece no modo apresentação) */}
+      {!presentationMode && (
+        <Sidebar
+          section={section}
+          onChangeSection={handleChangeSection}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={handleSidebarToggle}
+          mobileOpen={sidebarMobileOpen}
+        />
+      )}
+
+      {/* OVERLAY MOBILE */}
+      {!presentationMode && sidebarMobileOpen && (
         <div
           className="sidebar-overlay"
           onClick={() => setSidebarMobileOpen(false)}
         />
       )}
 
-      {/* Área principal */}
+      {/* MAIN */}
       <main className={`main ${sidebarCollapsed ? 'main--wide' : ''}`}>
         <Topbar
-          onOpenMobileMenu={() =>
-            setSidebarMobileOpen((prev) => !prev) // abre/fecha hambúrguer no mobile
-          }
+          onOpenMobileMenu={toggleMobileMenu}
+          darkMode={darkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+          presentationMode={presentationMode}
+          onTogglePresentationMode={handleTogglePresentationMode}
         />
 
         {loading && <div className="panel">Carregando dados...</div>}
@@ -259,10 +302,9 @@ function App() {
 
             {section === 'overview' && (
               <>
-                {/* CARDS DE KPI */}
+                {/* KPIs */}
                 <section className="kpi-section">
                   <div className="kpi-grid">
-                    {/* linha 1: visão geral */}
                     <KpiCard
                       title="Receita total"
                       value={formatCurrencyBR(metrics.receitaTotal)}
@@ -284,7 +326,6 @@ function App() {
                       subtitle="Total de sessões"
                     />
 
-                    {/* linha 2: eficiência */}
                     <KpiCard
                       title="ROAS"
                       value={
@@ -316,7 +357,6 @@ function App() {
                       subtitle="Investimento / Sessões"
                     />
 
-                    {/* linha 3: clientes e marketing */}
                     <KpiCard
                       title="Clientes novos"
                       value={metrics.clientesNovosTotal.toLocaleString('pt-BR')}
