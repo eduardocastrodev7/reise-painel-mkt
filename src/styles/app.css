@@ -156,7 +156,7 @@ body,
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, transform 0.1s ease, color 0.15s ease;
 }
 
 .sidebar-item-left {
@@ -175,18 +175,27 @@ body,
   justify-content: center;
 }
 
+/* hover: fundo #ee731b e texto escuro */
 .sidebar-item:hover:not(.disabled) {
-  background: rgba(244, 244, 244, 0.12);
+  background: var(--accent);
+  color: #ffffff;
   transform: translateX(2px);
 }
 
+.sidebar-item:hover:not(.disabled) .sidebar-icon-wrap {
+  background: #ffffff;
+  color: #ee731b;
+}
+
+/* ativo continua branco */
 .sidebar-item.active {
   background: #f4f4f4;
   color: #1d1d1b;
 }
 
 .sidebar-item.active .sidebar-icon-wrap {
-  background: #ffffff;
+  background: #ee731b;
+  color: #f4f4f4;
 }
 
 .sidebar-item.disabled {
@@ -209,7 +218,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: 24px;
-  overflow: hidden;
+  overflow: auto; /* permite scroll */
   transition: padding 0.18s ease;
 }
 
@@ -262,6 +271,7 @@ body,
   color: var(--text-muted);
 }
 
+/* Dashboard diário -> Resultados Diários já está no JSX */
 .topbar-title {
   margin: 6px 0 0;
   font-size: 1.9rem;
@@ -514,6 +524,10 @@ tbody tr:hover {
 
   .filters-right {
     width: 100%;
+  }
+
+  .kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

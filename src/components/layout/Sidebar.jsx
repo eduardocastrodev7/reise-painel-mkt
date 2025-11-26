@@ -101,7 +101,7 @@ export function Sidebar({
     >
       <div className="sidebar-header">
         <div className="sidebar-logo-mark">
-          {/* Coloque sua logo em public/logo-reise.svg */}
+          {/* agora em PNG */}
           <img
             src="/logo-reise.png"
             alt="Reise"
@@ -111,12 +111,12 @@ export function Sidebar({
 
         {!collapsed && (
           <div className="sidebar-logo-text">
-            <span className="logo-title">Reise Data</span>
-            <span className="logo-subtitle">Marketing Dashboard</span>
+            <span className="logo-title">Reise</span>
+            <span className="logo-subtitle">Painel Marketing</span>
           </div>
         )}
 
-        {/* botão de recolher sidebar (desktop) */}
+        {/* botão de recolher (desktop) */}
         <button
           type="button"
           className="sidebar-toggle"

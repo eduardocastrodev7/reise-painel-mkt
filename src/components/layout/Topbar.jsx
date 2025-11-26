@@ -4,6 +4,7 @@ export function Topbar({ onOpenMobileMenu }) {
   return (
     <header className="topbar">
       <div className="topbar-left">
+        {/* Botão hambúrguer (aparece só no mobile via CSS) */}
         <button
           type="button"
           className="topbar-menu-btn"
@@ -17,16 +18,14 @@ export function Topbar({ onOpenMobileMenu }) {
 
         <div>
           <div className="topbar-subtitle">Marketing Analytics</div>
-          <h1 className="topbar-title">Dashboard diário</h1>
+          {/* Dashboard diário -> Resultados Diários */}
+          <h1 className="topbar-title">Resultados Diários</h1>
         </div>
       </div>
 
-      <div className="topbar-right">
-        <div className="user-pill">
-          <span className="user-avatar">MKT</span>
-          <span className="user-name">Time de Marketing</span>
-        </div>
-      </div>
+      {/* Removemos o "Time de Marketing" e o chip de usuário */}
+      {/* Se quiser algo no canto direito depois (ex: filtro global / perfil), colocamos aqui */}
+      <div className="topbar-right" />
     </header>
   );
 }

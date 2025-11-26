@@ -12,7 +12,7 @@ import { KpiCard } from './components/dashboard/KpiCard';
 
 import './styles/app.css';
 
-// helper para porcentagens bonitinhas em pt-BR
+// helper para porcentagens em pt-BR
 const formatPercent = (v, digits = 2) =>
   v > 0
     ? `${(v * 100).toLocaleString('pt-BR', {
@@ -21,7 +21,7 @@ const formatPercent = (v, digits = 2) =>
       })}%`
     : '-';
 
-// helper para data completa dd/mm/aaaa
+// data completa dd/mm/aaaa
 const formatDateFull = (date) =>
   date
     ? date.toLocaleDateString('pt-BR', {
@@ -84,7 +84,7 @@ function App() {
     });
   }, [rows, startDate, endDate]);
 
-  // Calcula KPIs do período selecionado
+  // Calcula KPIs do período
   const metrics = useMemo(() => {
     if (!rowsFiltradas.length) {
       return {
@@ -111,7 +111,7 @@ function App() {
 
     rowsFiltradas.forEach((r) => {
       receitaTotal += r.receitaFaturada;
-      investimentoTotal += r.investFacebook; // investFacebook = investimento total do dia
+      investimentoTotal += r.investFacebook;
       sessoesTotal += r.sessoes;
       pedidosTotal += r.pedidosAprovados;
       clientesNovosTotal += r.clientesNovos || 0;
@@ -182,7 +182,11 @@ function App() {
 
       {/* Área principal */}
       <main className={`main ${sidebarCollapsed ? 'main--wide' : ''}`}>
-        <Topbar onOpenMobileMenu={() => setSidebarMobileOpen(true)} />
+        <Topbar
+          onOpenMobileMenu={() =>
+            setSidebarMobileOpen((prev) => !prev) // <<< TOGGLE: abre e fecha
+          }
+        />
 
         {loading && <div className="panel">Carregando dados...</div>}
 
@@ -194,7 +198,6 @@ function App() {
 
         {!loading && !erro && (
           <>
-            {/* Filtro de período */}
             <DateRangeFilter
               minDate={minDate}
               maxDate={maxDate}
