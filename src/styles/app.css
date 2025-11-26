@@ -1,7 +1,7 @@
 :root {
-  /* Tema claro (padrão) */
-  --bg-app: #0f1115;
-  --bg: #f4f4f4;
+  /* tema base (claro) */
+  --bg-app: #f4f4f4;
+  --bg: #ffffff;
   --bg-card: #ffffff;
   --text: #1d1d1b;
   --text-muted: #7a7a7a;
@@ -44,7 +44,7 @@ body,
     padding 0.3s ease;
 }
 
-/* animações suaves para superfícies */
+/* animações gerais pras superfícies */
 .sidebar,
 .main,
 .panel,
@@ -61,18 +61,20 @@ body,
     transform 0.15s ease;
 }
 
-/* ================= TEMA ESCURO ================= */
+/* ================= TEMAS ================= */
 
+/* tema escuro: sobrescreve variáveis */
 .app-root.theme-dark {
-  --bg-app: #050608;
+  --bg-app: #2b2d31;
   --bg: #101014;
-  --bg-card: #18181d;
+  --bg-card: #1a1a1d;
   --text: #f7f7f7;
   --text-muted: #a0a0b4;
   --border: #363643;
   --shadow-soft: 0 16px 32px rgba(0, 0, 0, 0.75);
 }
 
+/* ajustes finos em dark */
 .app-root.theme-dark .sidebar {
   background: #050608;
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.85);
@@ -92,7 +94,7 @@ body,
   border-color: #3a3a48;
 }
 
-/* tabela no dark mode */
+/* tabela em dark */
 .app-root.theme-dark .table-wrapper {
   border-color: #343445;
 }
@@ -160,7 +162,7 @@ body,
     transform 0.25s ease,
     background-color 0.3s ease,
     box-shadow 0.3s ease;
-  z-index: 40; /* sidebar SEMPRE acima da topbar e do conteúdo */
+  z-index: 40; /* sempre acima do overlay e do conteúdo */
 }
 
 .sidebar--collapsed {
@@ -274,6 +276,10 @@ body,
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    color 0.15s ease;
 }
 
 .sidebar-item-left {
@@ -359,7 +365,7 @@ body,
   justify-content: space-between;
   align-items: center;
   position: relative;
-  z-index: 10; /* conteúdo normal: abaixo da sidebar e overlay */
+  z-index: 10; /* abaixo do overlay e da sidebar */
 }
 
 .topbar-left {
@@ -391,7 +397,7 @@ body,
   background: #555;
 }
 
-/* botões de Apresentação / Tema */
+/* botões de modo/apresentação */
 
 .topbar-right {
   display: flex;
@@ -636,7 +642,7 @@ th {
   color: var(--text-muted);
 }
 
-/* zebra + hover no claro */
+/* zebra e hover (claro) */
 tbody tr:nth-child(even) {
   background: #fcfcfc;
 }
@@ -645,7 +651,46 @@ tbody tr:hover {
   background: #fff4e6;
 }
 
-/* ================= RESPONSIVO ================= */
+/* ================= SCROLLBARS ================= */
+
+/* Firefox (global: main, tabela, etc.) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.35) transparent;
+}
+
+.app-root.theme-dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+
+/* WebKit (Chrome, Edge, Safari) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;      /* deixa ver a borda arredondada do card */
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;   /* deixa o “miolo” mais fino */
+  background-clip: padding-box;
+}
+
+.app-root.theme-dark *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* um pouco menor dentro do detalhe diário */
+.table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+/* ================= RESPONSIVO (MOBILE) ================= */
 
 @media (max-width: 900px) {
   .app-root {
@@ -654,14 +699,19 @@ tbody tr:hover {
     gap: 0;
   }
 
+  .app-root.presentation-mode {
+    padding: 0;
+  }
+
+  /* SIDEBAR MOBILE: fixa do topo ao rodapé e entra deslizando */
   .sidebar {
     position: fixed;
     top: 0;
     left: 0;
     height: 100vh;
+    width: 260px;
     transform: translateX(-100%);
     border-radius: 0;
-    width: 260px;
     box-shadow: none;
   }
 
@@ -669,8 +719,9 @@ tbody tr:hover {
     transform: translateX(0);
   }
 
+  /* no mobile não usamos "colapsar", sempre largura cheia do menu */
   .sidebar--collapsed {
-    width: 260px; /* ignora colapsado no mobile */
+    width: 260px;
   }
 
   .main {
@@ -696,14 +747,13 @@ tbody tr:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* no mobile, pra caber melhor */
+  /* chips mais compactos no mobile */
   .mode-chip-label {
     display: none;
   }
 
-  /* GARANTE: topbar fica atrás da sidebar/overlay */
-  .topbar {
-    z-index: 10; /* menor que overlay (30) e sidebar (40) */
+  .topbar-right {
+    gap: 6px;
   }
 }
 
