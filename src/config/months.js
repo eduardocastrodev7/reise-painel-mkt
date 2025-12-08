@@ -26,4 +26,9 @@ export const MONTHS = [
     label: 'Novembro 2025',
     sheetName: 'Novembro-2025',
   },
+    {
+    id: '2025-12',
+    label: 'Dezembro 2025',
+    sheetName: 'Dezembro-2025',
+  },
 ];

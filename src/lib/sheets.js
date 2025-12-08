@@ -85,19 +85,32 @@ for (const month of months) {
       const rawData = row['Data'] || row['data'];
       let date = parseDataBR(rawData, month.id);
 
-      if (!date) {
-        // Se não tem data escrita mas tem números, usa a data anterior + 1 dia
-        if (!rawData && hasActivity && lastDateForMonth) {
-          const next = new Date(lastDateForMonth.getTime());
-          next.setDate(next.getDate() + 1);
-          date = next;
-        } else {
-          // cabeçalhos, totais, linhas vazias etc -> ignora
-          return;
-        }
-      }
+if (!date) {
+  // Se não tem data escrita mas tem números, tenta usar a data anterior + 1 dia
+  // MAS só se continuar no mesmo mês/ano. Se "pular" de mês (ex.: linha de total do mês),
+  // ignoramos essa linha para não cair como um dia a mais no mês seguinte.
+  if (!rawData && hasActivity && lastDateForMonth) {
+    const next = new Date(lastDateForMonth.getTime());
+    next.setDate(next.getDate() + 1);
 
-      lastDateForMonth = date;
+    const sameMonth =
+      next.getMonth() === lastDateForMonth.getMonth() &&
+      next.getFullYear() === lastDateForMonth.getFullYear();
+
+    if (!sameMonth) {
+      // Ex.: linha de total do mês que não deve virar 01 do mês seguinte
+      return;
+    }
+
+    date = next;
+  } else {
+    // cabeçalhos, totais, linhas vazias etc -> ignora
+    return;
+  }
+}
+
+lastDateForMonth = date;
+
 
       // 3) Clientes novos a partir do CAC (sua regra: investimento total / CAC)
       let clientesNovos = 0;

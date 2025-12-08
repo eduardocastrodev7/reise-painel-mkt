@@ -1,4 +1,5 @@
 // src/components/dashboard/DailyDashboard.jsx
+import { useState } from 'react';
 import { DateRangeFilter } from './DateRangeFilter';
 import { KpiCard } from './KpiCard';
 import { KPI_CARDS } from '../../config/kpiCards';
@@ -39,45 +40,9 @@ export function DailyDashboard({
   startDate,
   endDate,
   onChangePeriodo,
+  presentationMode,
 }) {
-  // ========== SKELETON DE CARREGAMENTO ==========
-  if (loading) {
-    return (
-      <>
-        <section className="panel">
-          <div className="skeleton skeleton-label" />
-          <div className="skeleton skeleton-title" />
-        </section>
-
-        <section className="kpi-section">
-          <div className="kpi-grid">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="kpi-card kpi-card--skeleton">
-                <div className="skeleton skeleton-text-sm" />
-                <div className="skeleton skeleton-number" />
-                <div className="skeleton skeleton-text-xs" />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="panel table-panel">
-          <div className="skeleton skeleton-text-sm" />
-          <div className="skeleton skeleton-table-row" />
-          <div className="skeleton skeleton-table-row" />
-        </section>
-      </>
-    );
-  }
-
-  // ========== ERRO ==========
-  if (erro) {
-    return (
-      <div className="panel panel-error">
-        <strong>Ops!</strong> {erro}
-      </div>
-    );
-  }
+  const [showAdvancedColumns, setShowAdvancedColumns] = useState(false);
 
   const hasData = rowsFiltradas && rowsFiltradas.length > 0;
 
@@ -85,24 +50,11 @@ export function DailyDashboard({
   const metaTotal = metrics.metaTotalPeriodo || 0;
   const atingimentoMeta = metrics.atingimentoMeta || 0;
   const diferencaMeta = metrics.diferencaMeta || 0;
+  const roasValor = metrics.roas || 0;
+  const sessoesTotais = metrics.sessoesTotal || 0;
+  const pedidosTotais = metrics.pedidosTotal || 0;
 
-  let metaStatusLabel = 'Sem meta configurada';
-  let metaStatusClass = 'summary-pill-neutral';
-
-  if (metaTotal > 0) {
-    if (atingimentoMeta >= 1) {
-      metaStatusLabel = 'Acima da meta';
-      metaStatusClass = 'summary-pill-good';
-    } else if (atingimentoMeta >= 0.9) {
-      metaStatusLabel = 'Próximo da meta';
-      metaStatusClass = 'summary-pill-warn';
-    } else {
-      metaStatusLabel = 'Abaixo da meta';
-      metaStatusClass = 'summary-pill-bad';
-    }
-  }
-
-  // ========== QUALIDADE DOS DADOS ==========
+  // ===== QUALIDADE DOS DADOS =====
   let diasSemDados = 0;
   let diasInvestSemReceita = 0;
 
@@ -125,16 +77,33 @@ export function DailyDashboard({
     });
   }
 
-  // ========== COMPARAÇÃO COM PERÍODO ANTERIOR ==========
+  // ===== MELHOR DIA / PIOR DIA =====
+  let melhorDia = null;
+  let piorDia = null;
+
+  if (hasData) {
+    const diasValidos = rowsFiltradas.filter(
+      (r) => (r.receitaFaturada || 0) > 0,
+    );
+
+    if (diasValidos.length > 0) {
+      melhorDia = diasValidos.reduce((acc, r) =>
+        r.receitaFaturada > acc.receitaFaturada ? r : acc,
+      );
+      piorDia = diasValidos.reduce((acc, r) =>
+        r.receitaFaturada < acc.receitaFaturada ? r : acc,
+      );
+    }
+  }
+
+  // ===== COMPARAÇÃO PARA OS KPIs DOS CARDS =====
   const buildComparison = (card) => {
     if (!card.showComparison || !prevMetrics) return null;
 
     const current = metrics[card.metricKey] ?? 0;
     const previous = prevMetrics[card.metricKey] ?? 0;
 
-    if (!previous || !isFinite(previous)) {
-      return null;
-    }
+    if (!previous || !isFinite(previous)) return null;
 
     const diff = current - previous;
     const pctChange = (diff / previous) * 100;
@@ -154,20 +123,16 @@ export function DailyDashboard({
     }
 
     const sign = pctChange > 0 ? '+' : pctChange < 0 ? '-' : '';
-    const arrow =
-      variant === 'up' ? '↑' : variant === 'down' ? '↓' : '';
+    const arrow = variant === 'up' ? '↑' : variant === 'down' ? '↓' : '';
 
     const label = `${arrow ? arrow + ' ' : ''}${
       sign ? sign : ''
     }${absPct}% vs período anterior`;
 
-    return {
-      variant,
-      label,
-    };
+    return { variant, label };
   };
 
-  // ========== AGRUPAMENTO DE KPIs ==========
+  // ===== AGRUPAMENTO DOS CARDS KPI =====
   const grouped = KPI_CARDS.reduce((acc, card) => {
     if (!acc[card.group]) acc[card.group] = [];
     acc[card.group].push(card);
@@ -190,8 +155,7 @@ export function DailyDashboard({
                 valueDisplay = formatCurrencyBR(raw);
                 break;
               case 'currency-or-dash':
-                valueDisplay =
-                  raw > 0 ? formatCurrencyBR(raw) : '-';
+                valueDisplay = raw > 0 ? formatCurrencyBR(raw) : '-';
                 break;
               case 'integer':
                 valueDisplay = raw.toLocaleString('pt-BR');
@@ -203,8 +167,7 @@ export function DailyDashboard({
                 valueDisplay = formatPercent(raw, 2);
                 break;
               case 'roas':
-                valueDisplay =
-                  raw > 0 ? `${raw.toFixed(2)}x` : '-';
+                valueDisplay = raw > 0 ? `${raw.toFixed(2)}x` : '-';
                 break;
               default:
                 valueDisplay = String(raw);
@@ -227,7 +190,7 @@ export function DailyDashboard({
       </div>
     ));
 
-  // ========== EXPORTAR CSV ==========
+  // ===== EXPORTAR CSV =====
   const handleExportCsv = () => {
     if (!rowsFiltradas || rowsFiltradas.length === 0) return;
 
@@ -262,37 +225,28 @@ export function DailyDashboard({
         pedidosDia - clientesNovosDia,
       );
 
+      const receitaDia = r.receitaFaturada || 0;
       const ticketMedioDia =
-        pedidosDia > 0
-          ? r.receitaFaturada / pedidosDia
-          : 0;
+        pedidosDia > 0 ? receitaDia / pedidosDia : 0;
       const taxaConvDia =
         sessoesDia > 0 ? pedidosDia / sessoesDia : 0;
       const cpsDia =
-        sessoesDia > 0
-          ? investimentoDia / sessoesDia
-          : 0;
+        sessoesDia > 0 ? investimentoDia / sessoesDia : 0;
       const cacDia =
-        clientesNovosDia > 0
-          ? investimentoDia / clientesNovosDia
-          : 0;
+        clientesNovosDia > 0 ? investimentoDia / clientesNovosDia : 0;
       const custoMktDia =
-        r.receitaFaturada > 0
-          ? investimentoDia / r.receitaFaturada
-          : 0;
+        receitaDia > 0 ? investimentoDia / receitaDia : 0;
 
       const cols = [
         formatDateFull(r.date),
-        r.receitaFaturada?.toFixed(2).replace('.', ','),
-        r.metaDia?.toFixed(2).replace('.', ','),
+        receitaDia.toFixed(2).replace('.', ','),
+        (r.metaDia || 0).toFixed(2).replace('.', ','),
         sessoesDia.toString(),
         pedidosDia.toString(),
         ticketMedioDia
           ? ticketMedioDia.toFixed(2).replace('.', ',')
           : '',
-        (taxaConvDia * 100)
-          .toFixed(2)
-          .replace('.', ','),
+        (taxaConvDia * 100).toFixed(2).replace('.', ','),
         cpsDia ? cpsDia.toFixed(2).replace('.', ',') : '',
         clientesNovosDia.toString(),
         clientesRecorrentesDia.toString(),
@@ -300,9 +254,7 @@ export function DailyDashboard({
           ? investimentoDia.toFixed(2).replace('.', ',')
           : '',
         cacDia ? cacDia.toFixed(2).replace('.', ',') : '',
-        (custoMktDia * 100)
-          .toFixed(1)
-          .replace('.', ','),
+        (custoMktDia * 100).toFixed(1).replace('.', ','),
       ];
 
       return cols.join(';');
@@ -325,7 +277,49 @@ export function DailyDashboard({
     URL.revokeObjectURL(url);
   };
 
-  // ========== RENDER ==========
+  const toggleAdvancedColumns = () => {
+    setShowAdvancedColumns((prev) => !prev);
+  };
+
+  // ===== LOADING / ERRO =====
+  if (loading) {
+    return (
+      <>
+        <section className="panel">
+          <div className="skeleton skeleton-label" />
+          <div className="skeleton skeleton-title" />
+        </section>
+
+        <section className="kpi-section">
+          <div className="kpi-grid">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="kpi-card kpi-card--skeleton">
+                <div className="skeleton skeleton-text-sm" />
+                <div className="skeleton skeleton-number" />
+                <div className="skeleton skeleton-text-xs" />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel table-panel">
+          <div className="skeleton skeleton-text-sm" />
+          <div className="skeleton skeleton-table-row" />
+          <div className="skeleton skeleton-table-row" />
+        </section>
+      </>
+    );
+  }
+
+  if (erro) {
+    return (
+      <div className="panel panel-error">
+        <strong>Ops!</strong> {erro}
+      </div>
+    );
+  }
+
+  // ===== RENDER =====
   return (
     <>
       {/* FILTRO DE PERÍODO */}
@@ -337,49 +331,55 @@ export function DailyDashboard({
         onChange={onChangePeriodo}
       />
 
-      {/* META X REALIZADO */}
+      {/* META x REALIZADO (vira a “primeira coisa” depois do filtro) */}
       <section className="panel summary-panel">
         <div className="summary-header">
           <div>
             <div className="summary-label">Resumo do período</div>
             <h2 className="summary-title">Meta x realizado</h2>
           </div>
-          <span className={`summary-pill ${metaStatusClass}`}>
-            {metaStatusLabel}
-          </span>
+
+          {metaTotal > 0 && (
+            <span
+              className={
+                'summary-pill ' +
+                (atingimentoMeta >= 1
+                  ? 'summary-pill-good'
+                  : atingimentoMeta >= 0.9
+                  ? 'summary-pill-warn'
+                  : 'summary-pill-bad')
+              }
+            >
+              {atingimentoMeta >= 1
+                ? 'Acima da meta'
+                : atingimentoMeta >= 0.9
+                ? 'Próximo da meta'
+                : 'Abaixo da meta'}
+            </span>
+          )}
         </div>
 
         <div className="summary-grid">
           <div className="summary-item">
-            <span className="summary-item-label">
-              Receita realizada
-            </span>
+            <span className="summary-item-label">Receita realizada</span>
             <span className="summary-item-value">
               {formatCurrencyBR(receitaTotal)}
             </span>
           </div>
           <div className="summary-item">
-            <span className="summary-item-label">
-              Meta do período
-            </span>
+            <span className="summary-item-label">Meta do período</span>
             <span className="summary-item-value">
               {metaTotal > 0 ? formatCurrencyBR(metaTotal) : '-'}
             </span>
           </div>
           <div className="summary-item">
-            <span className="summary-item-label">
-              % atingimento
-            </span>
+            <span className="summary-item-label">% atingimento</span>
             <span className="summary-item-value">
-              {metaTotal > 0
-                ? formatPercent(atingimentoMeta, 1)
-                : '-'}
+              {metaTotal > 0 ? formatPercent(atingimentoMeta, 1) : '-'}
             </span>
           </div>
           <div className="summary-item">
-            <span className="summary-item-label">
-              Diferença
-            </span>
+            <span className="summary-item-label">Diferença</span>
             <span
               className={
                 'summary-item-value ' +
@@ -390,32 +390,58 @@ export function DailyDashboard({
                   : '')
               }
             >
-              {metaTotal > 0
-                ? formatCurrencyBR(diferencaMeta)
-                : '-'}
+              {metaTotal > 0 ? formatCurrencyBR(diferencaMeta) : '-'}
             </span>
           </div>
         </div>
 
-        {hasData && (
-          <div className="summary-data-quality">
-            {diasSemDados === 0 &&
-              diasInvestSemReceita === 0 && (
-                <span>
-                  ✅ Dados consistentes para o período
-                  selecionado.
+        {/* MELHOR / PIOR DIA */}
+        {hasData && (melhorDia || piorDia) && (
+          <div className="summary-highlight-days">
+            {melhorDia && (
+              <div className="summary-highlight-pill summary-highlight-pill--good">
+                <span className="summary-highlight-label">
+                  Melhor dia
                 </span>
-              )}
+                <span className="summary-highlight-date">
+                  {formatDateFull(melhorDia.date)}
+                </span>
+                <span className="summary-highlight-value">
+                  {formatCurrencyBR(melhorDia.receitaFaturada)}
+                </span>
+              </div>
+            )}
+            {piorDia && (
+              <div className="summary-highlight-pill summary-highlight-pill--bad">
+                <span className="summary-highlight-label">
+                  Pior dia
+                </span>
+                <span className="summary-highlight-date">
+                  {formatDateFull(piorDia.date)}
+                </span>
+                <span className="summary-highlight-value">
+                  {formatCurrencyBR(piorDia.receitaFaturada)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {hasData && !presentationMode && (
+          <div className="summary-data-quality">
+            {diasSemDados === 0 && diasInvestSemReceita === 0 && (
+              <span>✅ Dados consistentes para o período selecionado.</span>
+            )}
             {diasSemDados > 0 && (
               <span>
-                ⚠ {diasSemDados} dia(s) sem registro de
-                receita, investimento e sessões.
+                ⚠ {diasSemDados} dia(s) sem registro de receita, investimento
+                e sessões.
               </span>
             )}
             {diasInvestSemReceita > 0 && (
               <span>
-                ⚠ {diasInvestSemReceita} dia(s) com
-                investimento &gt; 0 e receita = 0.
+                ⚠ {diasInvestSemReceita} dia(s) com investimento &gt; 0 e
+                receita = 0.
               </span>
             )}
           </div>
@@ -425,32 +451,45 @@ export function DailyDashboard({
       {/* GRÁFICO RECEITA x META */}
       {hasData && <PerformanceChart rows={rowsFiltradas} />}
 
+      {/* SEM DADOS */}
       {!hasData ? (
         <div className="panel" style={{ marginTop: 16 }}>
           <h2>Sem dados para o período</h2>
           <p style={{ fontSize: '0.85rem', marginTop: 4 }}>
-            Ajuste o intervalo de datas para visualizar os
-            resultados diários de marketing.
+            Ajuste o intervalo de datas para visualizar os resultados diários
+            de marketing.
           </p>
         </div>
       ) : (
         <>
           {/* KPIs AGRUPADOS */}
-          <section className="kpi-section">
-            {renderKpiGroups()}
-          </section>
+          <section className="kpi-section">{renderKpiGroups()}</section>
 
           {/* TABELA DIÁRIA */}
           <section className="panel table-panel">
             <div className="panel-header">
               <h2>Detalhe diário</h2>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleExportCsv}
-              >
-                Exportar CSV
-              </button>
+              {!presentationMode && (
+                <div className="table-actions">
+                  <button
+                    type="button"
+                    className={
+                      'btn-ghost ' +
+                      (showAdvancedColumns ? 'btn-ghost--active' : '')
+                    }
+                    onClick={toggleAdvancedColumns}
+                  >
+                    {showAdvancedColumns ? 'Ocultar detalhes' : 'Ver detalhes'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleExportCsv}
+                  >
+                    Exportar CSV
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="table-wrapper">
@@ -464,12 +503,16 @@ export function DailyDashboard({
                     <th>Pedidos</th>
                     <th>Ticket médio</th>
                     <th>Taxa conv.</th>
-                    <th>CPS</th>
-                    <th>Clientes novos</th>
-                    <th>Clientes recorrentes</th>
                     <th>Investimento</th>
-                    <th>CAC (clientes novos)</th>
-                    <th>% custo MKT</th>
+                    {showAdvancedColumns && (
+                      <>
+                        <th>CPS</th>
+                        <th>Clientes novos</th>
+                        <th>Clientes recorrentes</th>
+                        <th>CAC (clientes novos)</th>
+                        <th>% custo MKT</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -481,21 +524,17 @@ export function DailyDashboard({
                       (r.investimentoTotal || 0);
                     const sessoesDia = r.sessoes || 0;
                     const pedidosDia = r.pedidosAprovados || 0;
-                    const clientesNovosDia =
-                      r.clientesNovos || 0;
+                    const clientesNovosDia = r.clientesNovos || 0;
                     const clientesRecorrentesDia = Math.max(
                       0,
                       pedidosDia - clientesNovosDia,
                     );
 
+                    const receitaDia = r.receitaFaturada || 0;
                     const ticketMedioDia =
-                      pedidosDia > 0
-                        ? r.receitaFaturada / pedidosDia
-                        : 0;
+                      pedidosDia > 0 ? receitaDia / pedidosDia : 0;
                     const taxaConvDia =
-                      sessoesDia > 0
-                        ? pedidosDia / sessoesDia
-                        : 0;
+                      sessoesDia > 0 ? pedidosDia / sessoesDia : 0;
                     const cpsDia =
                       sessoesDia > 0
                         ? investimentoDia / sessoesDia
@@ -505,74 +544,72 @@ export function DailyDashboard({
                         ? investimentoDia / clientesNovosDia
                         : 0;
                     const custoMktDia =
-                      r.receitaFaturada > 0
-                        ? investimentoDia /
-                          r.receitaFaturada
+                      receitaDia > 0
+                        ? investimentoDia / receitaDia
                         : 0;
 
                     const metaDia = r.metaDia || 0;
+
+                    const hasNoData =
+                      receitaDia === 0 &&
+                      investimentoDia === 0 &&
+                      sessoesDia === 0;
+                    const investSemReceita =
+                      receitaDia === 0 && investimentoDia > 0;
+
                     let rowClass = '';
                     if (metaDia > 0) {
-                      if (r.receitaFaturada >= metaDia) {
+                      if (receitaDia >= metaDia) {
                         rowClass = 'row-above-goal';
                       } else {
                         rowClass = 'row-below-goal';
                       }
                     }
+                    if (hasNoData) rowClass += ' row-no-data';
+                    if (investSemReceita)
+                      rowClass += ' row-invest-no-revenue';
 
                     return (
-                      <tr key={r.id} className={rowClass}>
+                      <tr key={r.id} className={rowClass.trim()}>
                         <td>{formatDateFull(r.date)}</td>
                         <td>
-                          {formatCurrencyBR(
-                            r.receitaFaturada,
-                          )}
+                          {hasNoData
+                            ? 'Sem registro'
+                            : formatCurrencyBR(receitaDia)}
                         </td>
-                        <td>
-                          {formatCurrencyBR(r.metaDia)}
-                        </td>
-                        <td>
-                          {sessoesDia.toLocaleString('pt-BR')}
-                        </td>
+                        <td>{formatCurrencyBR(metaDia)}</td>
+                        <td>{sessoesDia.toLocaleString('pt-BR')}</td>
                         <td>{pedidosDia}</td>
                         <td>
                           {ticketMedioDia > 0
-                            ? formatCurrencyBR(
-                                ticketMedioDia,
-                              )
+                            ? formatCurrencyBR(ticketMedioDia)
                             : '-'}
                         </td>
-                        <td>
-                          {formatPercent(taxaConvDia, 2)}
-                        </td>
-                        <td>
-                          {cpsDia > 0
-                            ? formatCurrencyBR(cpsDia)
-                            : '-'}
-                        </td>
-                        <td>
-                          {clientesNovosDia.toLocaleString(
-                            'pt-BR',
-                          )}
-                        </td>
-                        <td>
-                          {clientesRecorrentesDia.toLocaleString(
-                            'pt-BR',
-                          )}
-                        </td>
-                        <td>
-                          {formatCurrencyBR(
-                            investimentoDia,
-                          )}
-                        </td>
-                        <td>
-                          {cacDia > 0
-                            ? formatCurrencyBR(cacDia)
-                            : '-'}
-                        </td>
-                        <td>
-                          {formatPercent(custoMktDia, 1)}
-                        </td>
+                        <td>{formatPercent(taxaConvDia, 2)}</td>
+                        <td>{formatCurrencyBR(investimentoDia)}</td>
+                        {showAdvancedColumns && (
+                          <>
+                            <td>
+                              {cpsDia > 0
+                                ? formatCurrencyBR(cpsDia)
+                                : '-'}
+                            </td>
+                            <td>
+                              {clientesNovosDia.toLocaleString('pt-BR')}
+                            </td>
+                            <td>
+                              {clientesRecorrentesDia.toLocaleString(
+                                'pt-BR',
+                              )}
+                            </td>
+                            <td>
+                              {cacDia > 0
+                                ? formatCurrencyBR(cacDia)
+                                : '-'}
+                            </td>
+                            <td>{formatPercent(custoMktDia, 1)}</td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}

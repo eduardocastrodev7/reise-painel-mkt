@@ -28,7 +28,6 @@ body,
   background: var(--bg-app);
 }
 
-/* container principal do app */
 .app-root {
   display: flex;
   height: 100vh;
@@ -42,7 +41,6 @@ body,
     padding 0.3s ease;
 }
 
-/* animações gerais */
 .sidebar,
 .main,
 .panel,
@@ -90,7 +88,7 @@ body,
   border-color: #3a3a48;
 }
 
-/* tabela em dark */
+/* tabela dark */
 .app-root.theme-dark .table-wrapper {
   border-color: #343445;
 }
@@ -111,13 +109,13 @@ body,
   background: #252535;
 }
 
-/* KPI cards em dark */
+/* KPI cards dark */
 .app-root.theme-dark .kpi-card {
   background: var(--bg-card);
   border-color: #303043;
 }
 
-/* tooltip de KPI em dark */
+/* tooltip KPI dark */
 .app-root.theme-dark .kpi-info-tooltip {
   background: #111119;
   color: #f4f4f4;
@@ -134,8 +132,16 @@ body,
   box-shadow: none;
 }
 
-.app-root.presentation-mode .sidebar {
-  display: none;
+.app-root.presentation-mode .summary-title {
+  font-size: 1.4rem;
+}
+
+.app-root.presentation-mode .kpi-value {
+  font-size: 2rem;
+}
+
+.app-root.presentation-mode .kpi-group-title {
+  font-size: 0.9rem;
 }
 
 /* ================= OVERLAY MOBILE ================= */
@@ -296,27 +302,32 @@ body,
   justify-content: center;
 }
 
-/* HOVER padrão (itens não-ativos) */
-.sidebar-item:hover:not(.disabled):not(.active) {
+/* SVG dos ícones */
+.sidebar-icon-svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* HOVER – mesmo estilo para qualquer item não desabilitado (ativo ou não) */
+.sidebar-item:hover:not(.disabled) {
   background: var(--accent);
   color: #ffffff;
   transform: translateX(2px);
 }
 
-.sidebar-item:hover:not(.disabled):not(.active) .sidebar-icon-wrap {
+.sidebar-item:hover:not(.disabled) .sidebar-icon-wrap {
   background: rgba(0, 0, 0, 0.18);
 }
 
-.sidebar-item:hover:not(.disabled):not(.active) .sidebar-icon-wrap svg,
-.sidebar-item:hover:not(.disabled):not(.active) .sidebar-icon-wrap span {
+.sidebar-item:hover:not(.disabled) .sidebar-icon-wrap svg,
+.sidebar-item:hover:not(.disabled) .sidebar-icon-wrap span {
   color: #ffffff;
   fill: #ffffff;
   stroke: #ffffff;
 }
 
-/* ESTADO ATIVO (ex: Resultados diários)
-   - bolinha laranja (#ee731b)
-   - ícone branco */
+/* Estado ativo */
 .sidebar-item.active {
   background: #f4f4f4;
   color: #1d1d1b;
@@ -333,27 +344,7 @@ body,
   stroke: #ffffff;
 }
 
-/* HOVER DO ATIVO:
-   - pill continua clara
-   - bolinha branca
-   - ícone laranja */
-.sidebar-item.active:hover {
-  background: #f4f4f4;
-  color: #1d1d1b;
-  transform: translateX(2px);
-}
-
-.sidebar-item.active:hover .sidebar-icon-wrap {
-  background: #ffffff;
-}
-
-.sidebar-item.active:hover .sidebar-icon-wrap svg,
-.sidebar-item.active:hover .sidebar-icon-wrap span {
-  color: var(--accent);
-  fill: var(--accent);
-  stroke: var(--accent);
-}
-
+/* Itens desabilitados */
 .sidebar-item.disabled {
   opacity: 0.45;
   cursor: default;
@@ -545,7 +536,43 @@ body,
   border-color: var(--accent);
 }
 
-/* ================= FILTRO DE PERÍODO ================= */
+/* botão ghost */
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-ghost {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.btn-ghost--active {
+  background: #ffe1c8;
+  border-color: var(--accent);
+  color: #1d1d1b;
+}
+
+.app-root.theme-dark .btn-ghost {
+  background: transparent;
+  border-color: #3a3a48;
+  color: #d0d0e0;
+}
+
+.app-root.theme-dark .btn-ghost--active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+/* ================= FILTRO DE PERÍODO (DateRangeFilter) ================= */
 
 .filters-panel {
   display: flex;
@@ -573,8 +600,6 @@ body,
   color: var(--text-muted);
 }
 
-/* presets de período (pills) */
-
 .period-pills {
   display: flex;
   flex-wrap: wrap;
@@ -598,7 +623,6 @@ body,
   color: #ffffff;
 }
 
-/* pills em DARK MODE – texto sempre visível */
 .app-root.theme-dark .period-pill {
   background: #1c1c26;
   border-color: #373748;
@@ -641,7 +665,9 @@ body,
   background: #fff;
 }
 
-/* ================= BLOCO META X REALIZADO ================= */
+/* ========== META X REALIZADO ==========
+   (reutilizado também na visão CRM para blocos de destaque)
+*/
 
 .summary-panel {
   margin-top: 16px;
@@ -665,8 +691,6 @@ body,
   margin: 4px 0 0;
   font-size: 1.2rem;
 }
-
-/* pill de status */
 
 .summary-pill {
   font-size: 0.78rem;
@@ -739,7 +763,71 @@ body,
   gap: 6px 16px;
 }
 
-/* ================= KPI CARDS ================= */
+/* melhor/pior dia */
+
+.summary-highlight-days {
+  margin-top: 18px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 0.8rem;
+}
+
+.app-root.theme-dark .summary-highlight-days {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+.summary-highlight-pill {
+  border-radius: 999px;
+  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f4f4f4;
+}
+
+.summary-highlight-pill--good {
+  background: #e3f7ea;
+  color: #1f7b3d;
+}
+
+.summary-highlight-pill--bad {
+  background: #ffe6e6;
+  color: #9b2626;
+}
+
+.summary-highlight-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.summary-highlight-date {
+  font-weight: 500;
+}
+
+.summary-highlight-value {
+  font-weight: 600;
+}
+
+.app-root.theme-dark .summary-highlight-pill {
+  background: #242433;
+}
+
+.app-root.theme-dark .summary-highlight-pill--good {
+  background: #173224;
+  color: #65e0a1;
+}
+
+.app-root.theme-dark .summary-highlight-pill--bad {
+  background: #341a1a;
+  color: #ff958f;
+}
+
+/* ========== KPI CARDS ========== */
 
 .kpi-section {
   margin-top: 12px;
@@ -778,7 +866,7 @@ body,
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
 }
 
-/* faixa laranja lateral esquerda */
+/* barra lateral laranja */
 .kpi-card::before {
   content: '';
   position: absolute;
@@ -865,7 +953,7 @@ body,
   font-size: 0.75rem;
 }
 
-/* badge de comparação */
+/* badge comparação */
 
 .comparison-badge {
   display: inline-flex;
@@ -913,7 +1001,7 @@ body,
   border-color: #3a3a3a;
 }
 
-/* ================= GRÁFICO ================= */
+/* ========== GRÁFICO ========== */
 
 .chart-panel {
   margin-top: 12px;
@@ -960,23 +1048,18 @@ body,
   background: #8884d8;
 }
 
-/* TOOLTIP + EIXOS DO GRÁFICO EM DARK MODE */
+/* gráfico dark */
+
 .app-root.theme-dark .chart-tooltip {
   background: #101017;
   border-color: #333344;
   color: #f4f4f4;
 }
 
-.app-root.theme-dark .chart-tooltip strong {
-  color: #ffffff;
-}
-
-/* Eixos (dias / valores) */
 .app-root.theme-dark .recharts-cartesian-axis-tick-value tspan {
   fill: #f4f4f4;
 }
 
-/* Grid do gráfico */
 .app-root.theme-dark
   .recharts-cartesian-grid-horizontal
   line,
@@ -986,12 +1069,10 @@ body,
   stroke: rgba(255, 255, 255, 0.08);
 }
 
-/* Legenda */
 .app-root.theme-dark .recharts-default-legend {
   color: #f4f4f4;
 }
 
-/* Tooltip default do Recharts (caso apareça em algum momento) */
 .app-root.theme-dark
   .recharts-tooltip-wrapper
   .recharts-default-tooltip {
@@ -1000,7 +1081,7 @@ body,
   color: #f4f4f4 !important;
 }
 
-/* ================= TABELA ================= */
+/* ========== TABELA ========== */
 
 .table-panel {
   padding: 18px 18px 14px;
@@ -1040,7 +1121,6 @@ th {
   color: var(--text-muted);
 }
 
-/* zebra + hover (claro) */
 tbody tr:nth-child(even) {
   background: #fcfcfc;
 }
@@ -1049,7 +1129,6 @@ tbody tr:hover {
   background: #fff4e6;
 }
 
-/* destaque meta na tabela */
 tbody tr.row-above-goal {
   border-left: 3px solid #35a45b;
 }
@@ -1058,7 +1137,20 @@ tbody tr.row-below-goal {
   border-left: 3px solid #e24b4b;
 }
 
-/* ================= SKELETONS ================= */
+tbody tr.row-no-data {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+tbody tr.row-invest-no-revenue {
+  background: #fff0f0;
+}
+
+.app-root.theme-dark tbody tr.row-invest-no-revenue {
+  background: #3a1f1f;
+}
+
+/* ========== SKELETONS ========== */
 
 @keyframes skeleton-loading {
   0% {
@@ -1123,9 +1215,8 @@ tbody tr.row-below-goal {
   margin-top: 8px;
 }
 
-/* ================= SCROLLBARS ================= */
+/* ========== SCROLLBARS ========== */
 
-/* Firefox */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.35) transparent;
@@ -1135,7 +1226,6 @@ tbody tr.row-below-goal {
   scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
 }
 
-/* WebKit */
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1161,7 +1251,7 @@ tbody tr.row-below-goal {
   height: 6px;
 }
 
-/* ================= RESPONSIVO (MOBILE) ================= */
+/* ========== RESPONSIVO ========== */
 
 @media (max-width: 900px) {
   .app-root {
@@ -1193,8 +1283,17 @@ tbody tr.row-below-goal {
     width: 260px;
   }
 
+  .sidebar-item {
+    padding: 10px 12px;
+  }
+
+  .sidebar-icon-wrap {
+    width: 30px;
+    height: 30px;
+  }
+
   .main {
-    padding: 16px;
+    padding: 16px 14px 24px;
     border-radius: 0;
     box-shadow: none;
   }
@@ -1214,6 +1313,11 @@ tbody tr.row-below-goal {
 
   .kpi-grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .summary-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .mode-chip-label {
@@ -1222,6 +1326,13 @@ tbody tr.row-below-goal {
 
   .topbar-right {
     gap: 6px;
+  }
+}
+
+@media (max-width: 768px) {
+  th,
+  td {
+    padding: 6px 8px;
   }
 }
 
