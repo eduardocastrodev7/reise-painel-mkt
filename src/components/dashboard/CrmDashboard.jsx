@@ -1,9 +1,19 @@
 // src/components/dashboard/CrmDashboard.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useCrmData } from '../../hooks/useCrmData';
+import { useMarketingDailyData } from '../../hooks/useMarketingDailyData';
 import { DateRangeFilter } from './DateRangeFilter';
 import { KpiCard } from './KpiCard';
 import { formatCurrencyBR } from '../../lib/parsers';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from 'recharts';
 
 const formatPercent = (value, digits = 2) => {
   if (!Number.isFinite(value) || value === 0) return '-';
@@ -29,25 +39,81 @@ const normalizeDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+// Título do card com "i" de informação
+const KpiTitle = ({ label, info }) => (
+  <div className="kpi-title-with-info">
+    <span>{label}</span>
+    <span className="kpi-info" title={info}>
+      i
+    </span>
+  </div>
+);
+
+const WEEKDAY_LABELS = [
+  'Domingo',
+  'Segunda',
+  'Terça',
+  'Quarta',
+  'Quinta',
+  'Sexta',
+  'Sábado',
+];
+
+// Cor principal do CRM
+const COLOR_PRIMARY = '#ee731b';
+
 export function CrmDashboard({ presentationMode = false }) {
+  // === CRM (planilha de CRM) ===============================================
+  const crm = useCrmData();
   const {
-    loading,
-    erro,
-    rows,
+    loading: crmLoading,
+    erro: crmErro,
+    rows = [],
     minDate,
     maxDate,
-    metaFatCrmMensal,
-    monthlyCrmRevenue,
-    monthlyCrmOrders,
-    siteMonthlyRevenue,
-  } = useCrmData();
+    metaByMonth,
+    acoesSemCupomResumo,
+    acoesSemCupomByMonth,
+  } = crm;
 
+  // === SITE (Resultados Diários) ===========================================
+  const {
+    loading: dailyLoading,
+    erro: dailyErro,
+    metrics: dailyMetrics,
+    setPeriodo: setDailyPeriodo,
+  } = useMarketingDailyData();
+
+  // Período selecionado na aba de CRM
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
-  // Inicializa com o range completo da aba (ex.: mês inteiro)
+  // Ao carregar, seleciona o MÊS ATUAL (interseção entre mês atual e range de dados)
   useEffect(() => {
-    if (minDate && maxDate && !startDate && !endDate) {
+    if (!minDate || !maxDate) return;
+    if (startDate || endDate) return;
+
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    // limita pelo range que existe na planilha
+    const rangeStart = monthStart < minDate ? minDate : monthStart;
+    const rangeEnd = monthEnd > maxDate ? maxDate : monthEnd;
+
+    if (rangeStart <= rangeEnd) {
+      setStartDate(rangeStart);
+      setEndDate(rangeEnd);
+    } else {
+      // se não tiver dados no mês atual, cai pro range inteiro
       setStartDate(minDate);
       setEndDate(maxDate);
     }
@@ -60,7 +126,29 @@ export function CrmDashboard({ presentationMode = false }) {
     setEndDate(e);
   };
 
-  // === FILTRO POR PERÍODO (aceita 1 dia) ===================================
+  // Sincroniza o período do CRM com o período dos Resultados Diários
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    if (typeof setDailyPeriodo !== 'function') return;
+    setDailyPeriodo(startDate, endDate);
+  }, [startDate, endDate, setDailyPeriodo]);
+
+  // Meses efetivamente carregados no CRM (para meta proporcional)
+  const loadedMonthKeys = useMemo(() => {
+    const set = new Set();
+    for (const r of rows) {
+      const d = r.date;
+      if (!(d instanceof Date) || Number.isNaN(d.getTime())) continue;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+        2,
+        '0',
+      )}`;
+      set.add(key);
+    }
+    return set;
+  }, [rows]);
+
+  // === FILTRO POR PERÍODO (CRM) ============================================
   const rowsFiltradas = useMemo(() => {
     if (!rows.length) return [];
 
@@ -101,6 +189,7 @@ export function CrmDashboard({ presentationMode = false }) {
 
     return rows.filter((r) => {
       const d = r.date;
+      if (!(d instanceof Date) || Number.isNaN(d.getTime())) return false;
       const dMs = new Date(
         d.getFullYear(),
         d.getMonth(),
@@ -114,8 +203,51 @@ export function CrmDashboard({ presentationMode = false }) {
     });
   }, [rows, startDate, endDate]);
 
-  // === MÉTRICAS DO PERÍODO ================================================
-  const metrics = useMemo(() => {
+  // === META DO PERÍODO (proporcional a dias + respeita meses carregados) ====
+  const metaFatCrmPeriodo = useMemo(() => {
+    if (!startDate || !endDate) return null;
+    if (!metaByMonth || Object.keys(metaByMonth).length === 0) return null;
+
+    const sNorm = normalizeDate(startDate);
+    const eNorm = normalizeDate(endDate);
+    if (!sNorm || !eNorm) return null;
+
+    let s = sNorm;
+    let e = eNorm;
+    if (e < s) {
+      const tmp = s;
+      s = e;
+      e = tmp;
+    }
+
+    const msPorDia = 24 * 60 * 60 * 1000;
+    let totalMeta = 0;
+
+    for (
+      let d = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+      d <= e;
+      d = new Date(d.getTime() + msPorDia)
+    ) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+        2,
+        '0',
+      )}`;
+
+      // só considera meta de meses carregados no CRM
+      if (!loadedMonthKeys.has(key)) continue;
+
+      const metaMes = metaByMonth[key];
+      if (!metaMes || !Number.isFinite(metaMes) || metaMes <= 0) continue;
+
+      const diasNoMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      totalMeta += metaMes / diasNoMes;
+    }
+
+    return totalMeta;
+  }, [startDate, endDate, metaByMonth, loadedMonthKeys]);
+
+  // === MÉTRICAS DO PERÍODO (CRM, só A:G) ===================================
+  const metricsCrmBase = useMemo(() => {
     if (!rowsFiltradas.length) {
       return {
         receitaTotal: 0,
@@ -124,8 +256,7 @@ export function CrmDashboard({ presentationMode = false }) {
         canaisResumo: [],
         cuponsResumo: [],
         dailyResumo: [],
-        melhorDia: null,
-        piorDia: null,
+        descontoTotal: 0,
       };
     }
 
@@ -135,7 +266,7 @@ export function CrmDashboard({ presentationMode = false }) {
     const pedidosSet = new Set();
     const canaisMap = new Map();
     const cuponsMap = new Map();
-    const dailyMap = new Map();
+    const dailyMap = new Map(); // chave: data local YYYY-MM-DD
 
     for (const r of rowsFiltradas) {
       receitaTotal += r.valorTotal;
@@ -172,37 +303,44 @@ export function CrmDashboard({ presentationMode = false }) {
       cupom.receita += r.valorTotal;
       cupom.desconto += r.valorDesconto;
 
-      // diário
-      const diaKey = r.date.toISOString().slice(0, 10);
-      if (!dailyMap.has(diaKey)) {
-        dailyMap.set(diaKey, {
-          diaKey,
-          date: new Date(
-            r.date.getFullYear(),
-            r.date.getMonth(),
-            r.date.getDate(),
-          ),
-          pedidos: 0,
-          receita: 0,
-          desconto: 0,
-        });
+      // diário (agrupando pela data LOCAL, pra não duplicar dia 01)
+      const d = r.date;
+      if (d instanceof Date && !Number.isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = d.getMonth();
+        const day = d.getDate();
+
+        const diaKey = `${year}-${String(month + 1).padStart(
+          2,
+          '0',
+        )}-${String(day).padStart(2, '0')}`;
+
+        if (!dailyMap.has(diaKey)) {
+          const normalizedDate = new Date(year, month, day); // meia-noite local
+          dailyMap.set(diaKey, {
+            key: diaKey,
+            date: normalizedDate,
+            pedidos: 0,
+            receita: 0,
+            desconto: 0,
+          });
+        }
+
+        const dia = dailyMap.get(diaKey);
+        dia.pedidos += 1;
+        dia.receita += r.valorTotal;
+        dia.desconto += r.valorDesconto;
       }
-      const dia = dailyMap.get(diaKey);
-      dia.pedidos += 1;
-      dia.receita += r.valorTotal;
-      dia.desconto += r.valorDesconto;
     }
 
     const pedidosTotal = pedidosSet.size;
-    const ticketMedio =
-      pedidosTotal > 0 ? receitaTotal / pedidosTotal : 0;
+    const ticketMedio = pedidosTotal > 0 ? receitaTotal / pedidosTotal : 0;
 
     const canaisResumo = Array.from(canaisMap.values())
       .map((c) => ({
         ...c,
         ticket: c.pedidos > 0 ? c.receita / c.pedidos : 0,
-        percentReceita:
-          receitaTotal > 0 ? c.receita / receitaTotal : 0,
+        percentReceita: receitaTotal > 0 ? c.receita / receitaTotal : 0,
       }))
       .sort((a, b) => b.receita - a.receita);
 
@@ -210,25 +348,13 @@ export function CrmDashboard({ presentationMode = false }) {
       .map((c) => ({
         ...c,
         ticket: c.pedidos > 0 ? c.receita / c.pedidos : 0,
-        percentReceita:
-          receitaTotal > 0 ? c.receita / receitaTotal : 0,
+        percentReceita: receitaTotal > 0 ? c.receita / receitaTotal : 0,
       }))
       .sort((a, b) => b.receita - a.receita);
 
     const dailyResumo = Array.from(dailyMap.values()).sort(
       (a, b) => a.date - b.date,
     );
-
-    let melhorDia = null;
-    let piorDia = null;
-    for (const d of dailyResumo) {
-      if (!melhorDia || d.receita > melhorDia.receita) {
-        melhorDia = d;
-      }
-      if (!piorDia || d.receita < piorDia.receita) {
-        piorDia = d;
-      }
-    }
 
     return {
       receitaTotal,
@@ -237,38 +363,137 @@ export function CrmDashboard({ presentationMode = false }) {
       canaisResumo,
       cuponsResumo,
       dailyResumo,
-      melhorDia,
-      piorDia,
       descontoTotal,
     };
   }, [rowsFiltradas]);
 
   const {
-    receitaTotal,
-    pedidosTotal,
-    ticketMedio,
+    receitaTotal: receitaCrmBase,
+    pedidosTotal: pedidosCrmBase,
     canaisResumo,
     cuponsResumo,
     dailyResumo,
-    melhorDia,
-    piorDia,
-  } = metrics;
+  } = metricsCrmBase;
 
-  // Representatividade do CRM nas vendas do site (mês da aba)
-  const representatividadeMensal =
-    siteMonthlyRevenue > 0
-      ? monthlyCrmRevenue / siteMonthlyRevenue
+  // === DADOS PARA O GRÁFICO DE EVOLUÇÃO DIÁRIA =============================
+  const dailyChartData = useMemo(
+    () =>
+      dailyResumo.map((d) => ({
+        dateLabel: d.date.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+        }),
+        receita: d.receita,
+        pedidos: d.pedidos,
+      })),
+    [dailyResumo],
+  );
+
+  // === FATURAMENTO DO SITE NO PERÍODO (Resultados Diários) =================
+  const siteRevenuePeriodo = dailyMetrics?.receitaTotal || 0;
+
+  // === AÇÕES SEM CUPOM NO PERÍODO (proporcional por dia do mês) ============
+  const acoesSemCupomPeriodo = useMemo(() => {
+    if (!startDate || !endDate) {
+      return { pedidos: 0, receita: 0 };
+    }
+
+    if (
+      !acoesSemCupomByMonth ||
+      Object.keys(acoesSemCupomByMonth).length === 0
+    ) {
+      return { pedidos: 0, receita: 0 };
+    }
+
+    const sNorm = normalizeDate(startDate);
+    const eNorm = normalizeDate(endDate);
+    if (!sNorm || !eNorm) {
+      return { pedidos: 0, receita: 0 };
+    }
+
+    let s = sNorm;
+    let e = eNorm;
+    if (e < s) {
+      const tmp = s;
+      s = e;
+      e = tmp;
+    }
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    let totalPedidos = 0;
+    let totalReceita = 0;
+
+    for (
+      let d = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+      d <= e;
+      d = new Date(d.getTime() + msPerDay)
+    ) {
+      const monthKey = `${d.getFullYear()}-${String(
+        d.getMonth() + 1,
+      ).padStart(2, '0')}`;
+      const agg = acoesSemCupomByMonth[monthKey];
+      if (!agg) continue;
+
+      const diasNoMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      totalPedidos += agg.pedidos / diasNoMes;
+      totalReceita += agg.receita / diasNoMes;
+    }
+
+    return { pedidos: totalPedidos, receita: totalReceita };
+  }, [startDate, endDate, acoesSemCupomByMonth]);
+
+  // === CRM FINAL (pedidos + receita incluindo ações sem cupom) =============
+  const receitaCrmTotal =
+    receitaCrmBase + (acoesSemCupomPeriodo.receita || 0);
+  const pedidosCrmTotal =
+    pedidosCrmBase + (acoesSemCupomPeriodo.pedidos || 0);
+
+  const ticketMedioCrm =
+    pedidosCrmTotal > 0 ? receitaCrmTotal / pedidosCrmTotal : 0;
+
+  // === DIA DA SEMANA (CRM, só base A:G) ====================================
+  const weekdayResumo = useMemo(() => {
+    if (!rowsFiltradas.length) return [];
+
+    const map = new Map(); // weekday -> { weekday, pedidos, receita }
+
+    for (const r of rowsFiltradas) {
+      const d = r.date;
+      if (!(d instanceof Date) || Number.isNaN(d.getTime())) continue;
+      const w = d.getDay(); // 0 domingo, 6 sábado
+
+      if (!map.has(w)) {
+        map.set(w, { weekday: w, pedidos: 0, receita: 0 });
+      }
+
+      const agg = map.get(w);
+      agg.pedidos += 1;
+      agg.receita += r.valorTotal;
+    }
+
+    return Array.from(map.values())
+      .map((w) => ({
+        ...w,
+        ticket: w.pedidos > 0 ? w.receita / w.pedidos : 0,
+      }))
+      .sort((a, b) => a.weekday - b.weekday);
+  }, [rowsFiltradas]);
+
+  // === DERIVADOS ===========================================================
+  const atingMetaFatPeriodo =
+    metaFatCrmPeriodo && metaFatCrmPeriodo > 0
+      ? receitaCrmTotal / metaFatCrmPeriodo
       : null;
 
-  const atingMetaFatMensal =
-    metaFatCrmMensal > 0
-      ? monthlyCrmRevenue / metaFatCrmMensal
+  const representatividadePeriodo =
+    siteRevenuePeriodo && siteRevenuePeriodo > 0
+      ? receitaCrmTotal / siteRevenuePeriodo
       : null;
 
   const hasData = rowsFiltradas.length > 0;
 
-  // === ESTADOS GERAIS ======================================================
-  if (loading) {
+  // === ESTADOS GERAIS (LOADING / ERRO) =====================================
+  if (crmLoading || dailyLoading) {
     return (
       <div className="panel">
         <div className="skeleton skeleton-label" />
@@ -278,17 +503,17 @@ export function CrmDashboard({ presentationMode = false }) {
     );
   }
 
-  if (erro) {
+  if (crmErro) {
     return (
       <div className="panel panel-error">
-        <strong>Ops!</strong> {erro}
+        <strong>Ops!</strong> {crmErro}
       </div>
     );
   }
 
   if (!rows.length) {
     return (
-      <>
+      <div className="crm-dashboard-page">
         <DateRangeFilter
           minDate={minDate}
           maxDate={maxDate}
@@ -300,17 +525,24 @@ export function CrmDashboard({ presentationMode = false }) {
           <h2>Sem dados de CRM</h2>
           <p style={{ fontSize: '0.85rem', marginTop: 4 }}>
             Ainda não encontramos registros de CRM nessa planilha.
-            Verifique se o App Script já começou a alimentar o mês
-            atual.
+            Verifique se o App Script já começou a alimentar os dados.
           </p>
         </div>
-      </>
+      </div>
+    );
+  }
+
+  if (dailyErro) {
+    console.warn(
+      'Erro ao carregar Resultados Diários para representatividade CRM:',
+      dailyErro,
     );
   }
 
   // === RENDER ==============================================================
+
   return (
-    <>
+    <div className="crm-dashboard-page">
       <DateRangeFilter
         minDate={minDate}
         maxDate={maxDate}
@@ -323,90 +555,142 @@ export function CrmDashboard({ presentationMode = false }) {
       <section className="kpi-section">
         <div className="kpi-grid">
           <KpiCard
-            title="Receita CRM (período)"
-            value={formatCurrencyBR(receitaTotal)}
-            subtitle="Pedidos atribuídos ao CRM no intervalo filtrado"
-          />
-          <KpiCard
-            title="Pedidos CRM (período)"
-            value={pedidosTotal.toLocaleString('pt-BR')}
-            subtitle="Quantidade de pedidos de CRM no período"
-          />
-          <KpiCard
-            title="Ticket médio CRM (período)"
-            value={
-              ticketMedio > 0 ? formatCurrencyBR(ticketMedio) : '-'
+            title={
+              <KpiTitle
+                label="Receita CRM"
+                info="Somatório de faturamento dos pedidos atribuídos ao CRM no período filtrado, incluindo ações sem cupom."
+              />
             }
-            subtitle="Receita CRM / pedidos CRM no período"
+            value={formatCurrencyBR(receitaCrmTotal)}
           />
 
           <KpiCard
-            title="Meta CRM (faturamento mês)"
-            value={
-              metaFatCrmMensal > 0
-                ? formatCurrencyBR(metaFatCrmMensal)
-                : '-'
+            title={
+              <KpiTitle
+                label="Pedidos CRM"
+                info="Quantidade de pedidos atribuídos ao CRM no período, incluindo ações sem cupom."
+              />
             }
-            subtitle="Meta mensal de faturamento CRM"
+            value={Math.round(pedidosCrmTotal).toLocaleString('pt-BR')}
           />
+
           <KpiCard
-            title="% atingimento da meta (mês)"
-            value={
-              atingMetaFatMensal != null
-                ? formatPercent(atingMetaFatMensal, 1)
-                : '-'
+            title={
+              <KpiTitle
+                label="Ticket médio CRM"
+                info="Receita CRM (incluindo ações sem cupom) dividida pela quantidade de pedidos de CRM no período."
+              />
             }
-            subtitle="Faturamento CRM do mês / meta"
+            value={
+              ticketMedioCrm > 0 ? formatCurrencyBR(ticketMedioCrm) : '-'
+            }
           />
+
           <KpiCard
-            title="Representatividade do CRM"
+            title={
+              <KpiTitle
+                label="Meta CRM (período)"
+                info="Meta de faturamento CRM proporcional aos dias selecionados (com base na aba Metas_CRM)."
+              />
+            }
             value={
-              representatividadeMensal != null
-                ? formatPercent(representatividadeMensal, 1)
+              metaFatCrmPeriodo && metaFatCrmPeriodo > 0
+                ? formatCurrencyBR(metaFatCrmPeriodo)
                 : '-'
             }
-            subtitle="Participação do CRM no faturamento total do site"
+          />
+
+          <KpiCard
+            title={
+              <KpiTitle
+                label="% atingimento da meta"
+                info="Faturamento CRM (incluindo ações sem cupom) do período dividido pela meta do período."
+              />
+            }
+            value={
+              atingMetaFatPeriodo != null
+                ? formatPercent(atingMetaFatPeriodo, 1)
+                : '-'
+            }
+          />
+
+          <KpiCard
+            title={
+              <KpiTitle
+                label="Representatividade CRM"
+                info="Quanto o CRM (incluindo ações sem cupom) representa do faturamento total do site no mesmo período."
+              />
+            }
+            value={
+              representatividadePeriodo != null
+                ? formatPercent(representatividadePeriodo, 1)
+                : '-'
+            }
           />
         </div>
       </section>
 
-      {/* Melhor / pior dia */}
-      {hasData && !presentationMode && (
-        <section className="panel summary-panel">
-          <div className="summary-header">
-            <div>
-              <div className="summary-label">Evolução diária CRM</div>
-              <h2 className="summary-title">Melhor e pior dia</h2>
-            </div>
+      {/* GRÁFICO PRINCIPAL – EVOLUÇÃO DIÁRIA */}
+      {hasData && dailyChartData.length > 0 && (
+        <section className="panel chart-panel">
+          <div className="panel-header">
+            <h2>Evolução diária</h2>
           </div>
-
-          <div className="summary-highlight-days">
-            {melhorDia && (
-              <div className="summary-highlight-pill summary-highlight-pill--good">
-                <span className="summary-highlight-label">
-                  Melhor dia
-                </span>
-                <span className="summary-highlight-date">
-                  {formatDate(melhorDia.date)}
-                </span>
-                <span className="summary-highlight-value">
-                  {formatCurrencyBR(melhorDia.receita)}
-                </span>
-              </div>
-            )}
-            {piorDia && (
-              <div className="summary-highlight-pill summary-highlight-pill--bad">
-                <span className="summary-highlight-label">
-                  Pior dia
-                </span>
-                <span className="summary-highlight-date">
-                  {formatDate(piorDia.date)}
-                </span>
-                <span className="summary-highlight-value">
-                  {formatCurrencyBR(piorDia.receita)}
-                </span>
-              </div>
-            )}
+          <div className="chart-wrapper">
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart
+                data={dailyChartData}
+                margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#ececec"
+                />
+                <XAxis
+                  dataKey="dateLabel"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#dddddd' }}
+                  minTickGap={12}
+                />
+                <YAxis
+                  tickFormatter={(v) =>
+                    v.toLocaleString('pt-BR', {
+                      maximumFractionDigits: 0,
+                    })
+                  }
+                  tickLine={false}
+                  axisLine={{ stroke: '#dddddd' }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: '1px solid #eee',
+                    boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)',
+                  }}
+                  formatter={(value) => {
+                    const numero = Number(value) || 0;
+                    const valorFormatado = numero.toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                      maximumFractionDigits: 2,
+                    });
+                    return [valorFormatado, 'Receita CRM'];
+                  }}
+                  labelFormatter={(label) => `Dia ${label}`}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="receita"
+                  name="Receita CRM"
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 4 }}
+                  stroke={COLOR_PRIMARY}
+                  strokeWidth={2.3}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </section>
       )}
@@ -415,7 +699,7 @@ export function CrmDashboard({ presentationMode = false }) {
       {hasData && (
         <section className="panel table-panel">
           <div className="panel-header">
-            <h2>Evolução diária (CRM)</h2>
+            <h2>Evolução diária (tabela)</h2>
           </div>
           <div className="table-wrapper">
             <table>
@@ -424,35 +708,58 @@ export function CrmDashboard({ presentationMode = false }) {
                   <th>Data</th>
                   <th>Pedidos</th>
                   <th>Receita</th>
-                  <th>Descontos</th>
-                  <th>Ticket médio</th>
+                  <th>Desconto</th>
                 </tr>
               </thead>
               <tbody>
-                {dailyResumo.map((d) => {
-                  const ticket =
-                    d.pedidos > 0 ? d.receita / d.pedidos : 0;
-                  return (
-                    <tr key={d.diaKey}>
-                      <td>{formatDate(d.date)}</td>
-                      <td>{d.pedidos}</td>
-                      <td>{formatCurrencyBR(d.receita)}</td>
-                      <td>{formatCurrencyBR(d.desconto)}</td>
-                      <td>
-                        {ticket > 0
-                          ? formatCurrencyBR(ticket)
-                          : '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {dailyResumo.map((d) => (
+                  <tr key={d.key}>
+                    <td>{formatDate(d.date)}</td>
+                    <td>{d.pedidos.toLocaleString('pt-BR')}</td>
+                    <td>{formatCurrencyBR(d.receita)}</td>
+                    <td>{formatCurrencyBR(d.desconto)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </section>
       )}
 
-      {/* Por canal */}
+      {/* Performance por dia da semana – tabela */}
+      {hasData && weekdayResumo.length > 0 && (
+        <section className="panel table-panel">
+          <div className="panel-header">
+            <h2>Performance por dia da semana (CRM)</h2>
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Dia</th>
+                  <th>Pedidos</th>
+                  <th>Receita</th>
+                  <th>Ticket médio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weekdayResumo.map((w) => (
+                  <tr key={w.weekday}>
+                    <td>{WEEKDAY_LABELS[w.weekday]}</td>
+                    <td>{w.pedidos.toLocaleString('pt-BR')}</td>
+                    <td>{formatCurrencyBR(w.receita)}</td>
+                    <td>
+                      {w.ticket > 0 ? formatCurrencyBR(w.ticket) : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Performance por canal – tabela */}
       {hasData && (
         <section className="panel table-panel">
           <div className="panel-header">
@@ -473,12 +780,10 @@ export function CrmDashboard({ presentationMode = false }) {
                 {canaisResumo.map((c) => (
                   <tr key={c.canal}>
                     <td>{c.canal}</td>
-                    <td>{c.pedidos}</td>
+                    <td>{c.pedidos.toLocaleString('pt-BR')}</td>
                     <td>{formatCurrencyBR(c.receita)}</td>
                     <td>
-                      {c.ticket > 0
-                        ? formatCurrencyBR(c.ticket)
-                        : '-'}
+                      {c.ticket > 0 ? formatCurrencyBR(c.ticket) : '-'}
                     </td>
                     <td>{formatPercent(c.percentReceita, 1)}</td>
                   </tr>
@@ -489,11 +794,11 @@ export function CrmDashboard({ presentationMode = false }) {
         </section>
       )}
 
-      {/* Top cupons */}
+      {/* Performance por cupom – tabela */}
       {hasData && (
         <section className="panel table-panel">
           <div className="panel-header">
-            <h2>Top cupons de CRM</h2>
+            <h2>Performance por cupom de CRM</h2>
           </div>
           <div className="table-wrapper">
             <table>
@@ -507,15 +812,13 @@ export function CrmDashboard({ presentationMode = false }) {
                 </tr>
               </thead>
               <tbody>
-                {cuponsResumo.slice(0, 20).map((c) => (
+                {cuponsResumo.map((c) => (
                   <tr key={c.cupom}>
                     <td>{c.cupom}</td>
-                    <td>{c.pedidos}</td>
+                    <td>{c.pedidos.toLocaleString('pt-BR')}</td>
                     <td>{formatCurrencyBR(c.receita)}</td>
                     <td>
-                      {c.ticket > 0
-                        ? formatCurrencyBR(c.ticket)
-                        : '-'}
+                      {c.ticket > 0 ? formatCurrencyBR(c.ticket) : '-'}
                     </td>
                     <td>{formatPercent(c.percentReceita, 1)}</td>
                   </tr>
@@ -526,6 +829,47 @@ export function CrmDashboard({ presentationMode = false }) {
         </section>
       )}
 
+      {/* Resumo por ação sem cupom – tabela */}
+      {hasData &&
+        acoesSemCupomResumo &&
+        acoesSemCupomResumo.length > 0 && (
+          <section className="panel table-panel">
+            <div className="panel-header">
+              <h2>Resumo por ação sem cupom</h2>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Ação</th>
+                    <th>Pedidos</th>
+                    <th>Receita</th>
+                    <th>Ticket médio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acoesSemCupomResumo.map((a) => {
+                    const ticket =
+                      a.pedidos > 0 ? a.receita / a.pedidos : 0;
+                    return (
+                      <tr key={a.acao}>
+                        <td>{a.acao}</td>
+                        <td>{a.pedidos.toLocaleString('pt-BR')}</td>
+                        <td>{formatCurrencyBR(a.receita)}</td>
+                        <td>
+                          {ticket > 0
+                            ? formatCurrencyBR(ticket)
+                            : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
       {!hasData && (
         <div className="panel">
           <h2>Sem dados de CRM para o período selecionado</h2>
@@ -535,6 +879,6 @@ export function CrmDashboard({ presentationMode = false }) {
           </p>
         </div>
       )}
-    </>
+    </div>
   );
 }

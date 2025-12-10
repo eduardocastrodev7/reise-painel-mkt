@@ -1,5 +1,5 @@
 :root {
-  --bg-app: #0f1115;
+  --bg-app: #e7e7e7;
   --bg: #f4f4f4;
   --bg-card: #ffffff;
   --text: #1d1d1b;
@@ -60,7 +60,7 @@ body,
 /* ================= TEMA ESCURO ================= */
 
 .app-root.theme-dark {
-  --bg-app: #050608;
+  --bg-app: #242730;
   --bg: #101014;
   --bg-card: #18181d;
   --text: #f7f7f7;
@@ -1345,3 +1345,121 @@ tbody tr.row-invest-no-revenue {
     display: none;
   }
 }
+/* ==== CRM DASHBOARD LAYOUT ================================================= */
+
+.crm-dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Deixa os cards em grid responsivo */
+.crm-dashboard-page .kpi-section {
+  margin-top: 4px;
+}
+
+.crm-dashboard-page .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+/* Resumo com texto à esquerda e destaques à direita */
+.crm-dashboard-page .summary-panel {
+  margin-top: 4px;
+}
+
+.crm-dashboard-page .summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+  .crm-dashboard-page .summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Gráfico */
+.crm-dashboard-page .chart-panel {
+  margin-top: 4px;
+}
+
+.crm-dashboard-page .chart-wrapper {
+  width: 100%;
+  height: 260px;
+}
+
+/* Tabelas um pouco mais afastadas do gráfico */
+.crm-dashboard-page .table-panel {
+  margin-top: 8px;
+}
+/* ==== CRM DASHBOARD LAYOUT ================================================= */
+
+.crm-dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* grid dos cards – mantém */
+.crm-dashboard-page .kpi-section {
+  margin-top: 4px;
+}
+
+.crm-dashboard-page .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+/* título compactado com ícone de info */
+.crm-dashboard-page .kpi-title-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.crm-dashboard-page .kpi-info {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid #d4d4d8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+/* garante que a área do valor dentro do card tenha respiro parecido entre os cards */
+.crm-dashboard-page .kpi-grid .kpi-card-main,
+.crm-dashboard-page .kpi-grid .kpi-card {
+  /* se o seu componente tiver uma dessas classes, isso ajuda a alinhar */
+  min-height: 120px;
+}
+
+/* === CRM – linha com dois gráficos (dias da semana + top cupons) === */
+
+.crm-charts-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+
+.crm-charts-grid-2 .chart-wrapper {
+  height: 260px;
+}
+
+/* Só pra garantir respiro no topo dos charts em telas menores */
+.chart-panel .chart-wrapper {
+  padding-top: 4px;
+}
+
+

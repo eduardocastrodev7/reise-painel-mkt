@@ -107,130 +107,394 @@ function parseDateCell(cell) {
   return null;
 }
 
+// remove acento e coloca em maiúsculo pra comparar textos
+function normalizeText(str) {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
+}
+
+/**
+ * Tenta inferir o mês/ano a partir do nome da aba, ex: "Novembro-2025" -> "2025-11"
+ */
+function parseSheetNameToMonthKey(sheetName) {
+  if (!sheetName) return null;
+  const [maybeMonth, maybeYear] = sheetName.split('-').map((s) => s.trim());
+  if (!maybeMonth || !maybeYear) return null;
+
+  const idx = PT_MONTHS.findIndex(
+    (m) => m.toUpperCase() === maybeMonth.toUpperCase(),
+  );
+  if (idx === -1) return null;
+
+  const yearNum = Number(maybeYear);
+  if (!Number.isFinite(yearNum)) return null;
+
+  const monthNum = idx + 1;
+  return `${yearNum}-${String(monthNum).padStart(2, '0')}`;
+}
+
+/**
+ * Lê o bloco de resumo por ação sem cupom nas colunas
+ * N (Ação), O (Pedidos), P (Faturamento Total).
+ *
+ * Range usado: N:P da aba de CRM (colunas inteiras).
+ *
+ * Detectamos diretamente a linha de cabeçalho
+ * "Ação / Pedidos / Faturamento" em N, O e P.
+ */
+function parseAcoesSemCupomFromNP(json) {
+  if (!json || !json.table) return [];
+
+  const rows = json.table.rows || [];
+  if (!rows.length) return [];
+
+  // 1) Acha a linha de cabeçalho: Ação | Pedidos | Faturamento
+  let headerRowIndex = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const c = r.c || [];
+
+    const h0 = normalizeText((c[0]?.v ?? c[0]?.f ?? '').toString());
+    const h1 = normalizeText((c[1]?.v ?? c[1]?.f ?? '').toString());
+    const h2 = normalizeText((c[2]?.v ?? c[2]?.f ?? '').toString());
+
+    if (!h0 && !h1 && !h2) continue;
+
+    const isHeader =
+      (h0.includes('ACAO') || h0.includes('AÇÃO')) &&
+      h1.includes('PEDIDO') &&
+      (h2.includes('FATURAMENTO') ||
+        h2.includes('RECEITA') ||
+        h2.includes('TOTAL'));
+
+    if (isHeader) {
+      headerRowIndex = i;
+      break;
+    }
+  }
+
+  if (headerRowIndex === -1) {
+    // Não achou nenhum cabeçalho AÇÃO / PEDIDOS / FATURAMENTO
+    return [];
+  }
+
+  const dataStartIndex = headerRowIndex + 1;
+  const result = [];
+
+  // 2) Lê as linhas de dados abaixo do cabeçalho
+  for (let i = dataStartIndex; i < rows.length; i++) {
+    const r = rows[i];
+    const c = r.c || [];
+
+    const acaoRaw = (c[0]?.v ?? c[0]?.f ?? '').toString().trim();
+    const acaoNorm = normalizeText(acaoRaw);
+
+    // Fim da tabela: linha vazia
+    if (!acaoRaw) break;
+
+    // Nova seção / divisória
+    if (acaoRaw.startsWith('---') || acaoNorm.startsWith('---')) break;
+
+    // Linha TOTAL não é ação
+    if (acaoNorm === 'TOTAL' || acaoNorm.startsWith('TOTAL ')) {
+      continue;
+    }
+
+    const pedidos = parseNumberCell(c[1]);
+    const receita = parseNumberCell(c[2]);
+
+    // Linha sem nenhum número -> ignora
+    if (!Number.isFinite(pedidos) && !Number.isFinite(receita)) continue;
+
+    result.push({
+      acao: acaoRaw,
+      pedidos: Number.isFinite(pedidos) ? pedidos : 0,
+      receita: Number.isFinite(receita) ? receita : 0,
+    });
+  }
+
+  return result;
+}
+
 export function useCrmData(sheetNameOverride = null) {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
   const [rows, setRows] = useState([]);
 
+  // Metas
   const [metaFatCrmMensal, setMetaFatCrmMensal] = useState(0);
+  const [metaByMonth, setMetaByMonth] = useState({});
+
+  // KPIs globais (somando tudo que foi carregado)
+  const [monthlyCrmRevenue, setMonthlyCrmRevenue] = useState(0);
+  const [monthlyCrmOrders, setMonthlyCrmOrders] = useState(0);
+
+  // Representatividade (mantido por compatibilidade)
   const [siteMonthlyRevenue, setSiteMonthlyRevenue] = useState(0);
+  const [siteRevenueByMonth, setSiteRevenueByMonth] = useState({});
 
-useEffect(() => {
-  let cancelado = false;
+  // Resumo por ação sem cupom (somando todas as abas carregadas)
+  const [acoesSemCupomResumo, setAcoesSemCupomResumo] = useState([]);
+  // Totais das ações sem cupom por mês (YYYY-MM) -> { pedidos, receita }
+  const [acoesSemCupomByMonth, setAcoesSemCupomByMonth] = useState({});
 
-  async function carregar() {
-    try {
-      setLoading(true);
-      setErro(null);
+  useEffect(() => {
+    let cancelado = false;
 
-      const sheetId = import.meta.env.VITE_CRM_SHEET_ID;
-      if (!sheetId) {
-        setErro(
-          'VITE_CRM_SHEET_ID não configurado. Defina o ID da planilha de CRM no .env.local.',
-        );
-        setLoading(false);
-        return;
-      }
+    async function carregar() {
+      try {
+        setLoading(true);
+        setErro(null);
 
-      const fromEnv = (import.meta.env.VITE_CRM_SHEET_NAME || '').trim();
-      const sheetName =
-        (sheetNameOverride && sheetNameOverride.trim()) ||
-        fromEnv ||
-        getDefaultCrmSheetName();
+        const sheetId = import.meta.env.VITE_CRM_SHEET_ID;
+        if (!sheetId) {
+          setErro(
+            'VITE_CRM_SHEET_ID não configurado. Defina o ID da planilha de CRM no .env.local.',
+          );
+          setLoading(false);
+          return;
+        }
 
-      const baseUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
-        sheetName,
-      )}`;
+        const metasSheetName =
+          import.meta.env.VITE_CRM_META_SHEET_NAME || 'Metas_CRM';
 
-        const [respPedidos, respMeta, respResumo] = await Promise.all([
-          fetch(`${baseUrl}&range=A:G`),
-          fetch(`${baseUrl}&range=S33:S33`).catch(() => null),
-          fetch(`${baseUrl}&range=Q14:S18`).catch(() => null),
-        ]);
+        const fromEnv = (import.meta.env.VITE_CRM_SHEET_NAME || '').trim();
+        const listFromEnv = (import.meta.env.VITE_CRM_SHEETS || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
 
-        // --- Pedidos A:G (se falhar aqui, mostramos erro) -------------------
-        if (!respPedidos.ok) {
-          throw new Error(
-            `Erro HTTP ${respPedidos.status} ao buscar pedidos CRM`,
+        // Decide quais abas de pedidos vamos carregar:
+        let sheetNames = [];
+
+        if (Array.isArray(sheetNameOverride) && sheetNameOverride.length > 0) {
+          sheetNames = sheetNameOverride
+            .map((name) => (name || '').trim())
+            .filter(Boolean);
+        } else if (
+          typeof sheetNameOverride === 'string' &&
+          sheetNameOverride.trim()
+        ) {
+          sheetNames = [sheetNameOverride.trim()];
+        } else if (listFromEnv.length > 0) {
+          sheetNames = listFromEnv;
+        } else if (fromEnv) {
+          sheetNames = [fromEnv];
+        } else {
+          sheetNames = [getDefaultCrmSheetName()];
+        }
+
+        // --- 1) Carrega a aba de metas (Metas_CRM) ---------------------------
+        const metasUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
+          metasSheetName,
+        )}&range=A:D`;
+
+        const respMetas = await fetch(metasUrl);
+        const metasMap = new Map(); // 'YYYY-MM' -> meta
+
+        if (respMetas.ok) {
+          try {
+            const textMetas = await respMetas.text();
+            const jsonMetas = parseGvizResponse(textMetas);
+            const rowsMetas = jsonMetas.table?.rows || [];
+
+            for (const r of rowsMetas) {
+              const c = r.c || [];
+              const ano = c[0]?.v ?? c[0]?.f;
+              const mes = c[1]?.v ?? c[1]?.f;
+              const metaCell = c[3];
+
+              if (ano == null || mes == null || metaCell == null) continue;
+
+              const yearNum = Number(ano);
+              const monthNum = Number(mes);
+              if (!Number.isFinite(yearNum) || !Number.isFinite(monthNum)) {
+                continue;
+              }
+
+              const key = `${yearNum}-${String(monthNum).padStart(2, '0')}`;
+              const metaValue = parseNumberCell(metaCell);
+              if (!Number.isFinite(metaValue) || metaValue <= 0) continue;
+
+              metasMap.set(key, metaValue);
+            }
+          } catch (e) {
+            console.error('Erro ao interpretar aba Metas_CRM:', e);
+          }
+        } else {
+          console.warn(
+            `Não foi possível carregar a aba de metas (${metasSheetName}). HTTP ${respMetas.status}`,
           );
         }
 
-        const textPedidos = await respPedidos.text();
-        const jsonPedidos = parseGvizResponse(textPedidos);
-        const gRows = jsonPedidos.table?.rows || [];
+        // --- 2) Carrega as abas de CRM (detalhe + resumo ações sem cupom) ---
+        let allRows = [];
+        const acoesMap = new Map(); // chave = nome da ação normalizada
+        const acoesByMonthMap = new Map(); // chave = YYYY-MM -> { pedidos, receita }
 
-        const pedidos = gRows
-          .map((r) => {
-            const c = r.c || [];
-            const date = parseDateCell(c[0]);
-            const pedido = c[1]?.v || c[1]?.f || '';
-            const email = c[2]?.v || '';
-            const cupom = c[3]?.v || '';
-            const valorDesconto = parseNumberCell(c[4]);
-            const valorTotal = parseNumberCell(c[5]);
-            const canal = c[6]?.v || 'Outro';
+        for (const sheetName of sheetNames) {
+          const baseUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
+            sheetName,
+          )}`;
 
-            if (!date || !pedido || !Number.isFinite(valorTotal)) {
-              return null;
+          const [respPedidos, respAcoes] = await Promise.all([
+            fetch(`${baseUrl}&range=A:G`), // tabela de pedidos
+            fetch(`${baseUrl}&range=N:P`).catch(() => null), // resumo ações sem cupom (colunas inteiras)
+          ]);
+
+          // --- Pedidos A:G (linhas detalhadas) -------------------------------
+          if (!respPedidos.ok) {
+            throw new Error(
+              `Erro HTTP ${respPedidos.status} ao buscar pedidos CRM (aba ${sheetName})`,
+            );
+          }
+
+          const textPedidos = await respPedidos.text();
+          const jsonPedidos = parseGvizResponse(textPedidos);
+          const gRows = jsonPedidos.table?.rows || [];
+
+          const pedidos = gRows
+            .map((r) => {
+              const c = r.c || [];
+              const date = parseDateCell(c[0]);
+              const pedido = c[1]?.v || c[1]?.f || '';
+              const email = c[2]?.v || '';
+              const cupom = c[3]?.v || '';
+              const valorDesconto = parseNumberCell(c[4]);
+              const valorTotal = parseNumberCell(c[5]);
+              const canal = c[6]?.v || 'Outro';
+
+              if (!date || !pedido || !Number.isFinite(valorTotal)) {
+                return null;
+              }
+
+              return {
+                date,
+                pedido,
+                email,
+                cupom,
+                valorDesconto,
+                valorTotal,
+                canal,
+              };
+            })
+            .filter(Boolean);
+
+          allRows = allRows.concat(pedidos);
+
+          // Descobre os meses presentes nessa aba (via pedidos)
+          const monthKeysSet = new Set();
+          for (const p of pedidos) {
+            const d = p.date;
+            if (!(d instanceof Date) || Number.isNaN(d.getTime())) continue;
+            const key = `${d.getFullYear()}-${String(
+              d.getMonth() + 1,
+            ).padStart(2, '0')}`;
+            monthKeysSet.add(key);
+          }
+
+          // Fallback: se não tiver nenhum pedido, tenta inferir pelo nome da aba
+          if (monthKeysSet.size === 0) {
+            const inferred = parseSheetNameToMonthKey(sheetName);
+            if (inferred) {
+              monthKeysSet.add(inferred);
             }
+          }
 
-            return {
-              date,
-              pedido,
-              email,
-              cupom,
-              valorDesconto,
-              valorTotal,
-              canal,
-            };
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.date - b.date);
+          // --- Resumo por ação sem cupom (colunas N, O, P) -------------------
+          if (respAcoes && respAcoes.ok) {
+            try {
+              const textAcoes = await respAcoes.text();
+              const jsonAcoes = parseGvizResponse(textAcoes);
+              const acoesDaAba = parseAcoesSemCupomFromNP(jsonAcoes);
 
-        let meta = 0;
-        if (respMeta && respMeta.ok) {
-          try {
-            const textMeta = await respMeta.text();
-            const jsonMeta = parseGvizResponse(textMeta);
-            const rowsMeta = jsonMeta.table?.rows || [];
-            const cell = rowsMeta[0]?.c?.[0] || null; // S33:S33 -> 1 célula
-            meta = parseNumberCell(cell) || 0;
-          } catch (e) {
-            console.warn('Erro ao interpretar meta CRM S33:', e);
+              if (acoesDaAba.length) {
+                for (const item of acoesDaAba) {
+                  // 2.1) Acumulado por ação (independente do mês)
+                  const norm = normalizeText(item.acao);
+                  const prevAcao =
+                    acoesMap.get(norm) || {
+                      acao: item.acao,
+                      pedidos: 0,
+                      receita: 0,
+                    };
+                  prevAcao.pedidos += item.pedidos;
+                  prevAcao.receita += item.receita;
+                  acoesMap.set(norm, prevAcao);
+
+                  // 2.2) Acumulado por mês (para jogar nos cards por período)
+                  for (const monthKey of monthKeysSet) {
+                    const prevMonth =
+                      acoesByMonthMap.get(monthKey) || {
+                        pedidos: 0,
+                        receita: 0,
+                      };
+                    prevMonth.pedidos += item.pedidos;
+                    prevMonth.receita += item.receita;
+                    acoesByMonthMap.set(monthKey, prevMonth);
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn(
+                `Erro ao interpretar resumo por ação sem cupom (aba ${sheetName}):`,
+                e,
+              );
+            }
           }
         }
 
-        let siteRevenue = 0;
-        if (respResumo && respResumo.ok) {
-          try {
-            const textResumo = await respResumo.text();
-            const jsonResumo = parseGvizResponse(textResumo);
-            const rowsResumo = jsonResumo.table?.rows || [];
+        // Ordena todas as linhas de CRM por data
+        allRows.sort((a, b) => a.date - b.date);
 
-            // Procura linha onde Q = "SITE" e pega S (faturamento site)
-            for (const r of rowsResumo) {
-              const c = r.c || [];
-              const label =
-                (c[0]?.v ?? c[0]?.f ?? '')
-                  .toString()
-                  .trim()
-                  .toUpperCase();
-              if (label === 'SITE') {
-                siteRevenue = parseNumberCell(c[2]) || 0; // coluna S = índice 2 nesse range
-              }
-            }
-          } catch (e) {
-            console.warn(
-              'Erro ao interpretar resumo SITE Q14:S18 (CRM):',
-              e,
-            );
-          }
+        // Monta metaByMonth e metaFatCrmMensal
+        const metaByMonthObj = {};
+        let totalMeta = 0;
+        for (const [monthKey, value] of metasMap.entries()) {
+          if (!Number.isFinite(value) || value <= 0) continue;
+          metaByMonthObj[monthKey] = value;
+          totalMeta += value;
+        }
+
+        // Faturamento e pedidos de CRM (somando tudo)
+        let revenue = 0;
+        const pedidosSet = new Set();
+        for (const r of allRows) {
+          revenue += r.valorTotal;
+          pedidosSet.add(r.pedido);
+        }
+
+        const monthlyCrmRevenueCalc = revenue;
+        const monthlyCrmOrdersCalc = pedidosSet.size;
+
+        // Monta array final de ações sem cupom (ordenado por receita desc)
+        const acoesSemCupomArr = Array.from(acoesMap.values()).sort(
+          (a, b) => b.receita - a.receita,
+        );
+
+        // Mapa por mês -> objeto simples
+        const acoesByMonthObj = {};
+        for (const [monthKey, agg] of acoesByMonthMap.entries()) {
+          acoesByMonthObj[monthKey] = agg;
         }
 
         if (!cancelado) {
-          setRows(pedidos);
-          setMetaFatCrmMensal(meta);
-          setSiteMonthlyRevenue(siteRevenue);
+          setRows(allRows);
+          setMetaByMonth(metaByMonthObj);
+          setMetaFatCrmMensal(totalMeta);
+          setMonthlyCrmRevenue(monthlyCrmRevenueCalc);
+          setMonthlyCrmOrders(monthlyCrmOrdersCalc);
+          setAcoesSemCupomResumo(acoesSemCupomArr);
+          setAcoesSemCupomByMonth(acoesByMonthObj);
+
+          // compatibilidade
+          setSiteMonthlyRevenue(0);
+          setSiteRevenueByMonth({});
+
           setLoading(false);
         }
       } catch (err) {
@@ -241,8 +505,14 @@ useEffect(() => {
               'Erro ao carregar dados de CRM. Verifique a planilha e o .env.',
           );
           setRows([]);
+          setMetaByMonth({});
           setMetaFatCrmMensal(0);
+          setMonthlyCrmRevenue(0);
+          setMonthlyCrmOrders(0);
+          setAcoesSemCupomResumo([]);
+          setAcoesSemCupomByMonth({});
           setSiteMonthlyRevenue(0);
+          setSiteRevenueByMonth({});
           setLoading(false);
         }
       }
@@ -255,40 +525,12 @@ useEffect(() => {
     };
   }, [sheetNameOverride]);
 
-  // Range de datas disponível
+  // Range de datas disponível (considerando todas as abas carregadas)
   const { minDate, maxDate } = useMemo(() => {
     if (!rows.length) return { minDate: null, maxDate: null };
     return {
       minDate: rows[0].date,
       maxDate: rows[rows.length - 1].date,
-    };
-  }, [rows]);
-
-  // Faturamento e pedidos do mês da aba (ignora dias de outro mês)
-  const { monthlyCrmRevenue, monthlyCrmOrders } = useMemo(() => {
-    if (!rows.length) {
-      return { monthlyCrmRevenue: 0, monthlyCrmOrders: 0 };
-    }
-
-    const baseMonth = rows[0].date.getMonth();
-    const baseYear = rows[0].date.getFullYear();
-
-    let revenue = 0;
-    const pedidosSet = new Set();
-
-    for (const r of rows) {
-      if (
-        r.date.getMonth() === baseMonth &&
-        r.date.getFullYear() === baseYear
-      ) {
-        revenue += r.valorTotal;
-        pedidosSet.add(r.pedido);
-      }
-    }
-
-    return {
-      monthlyCrmRevenue: revenue,
-      monthlyCrmOrders: pedidosSet.size,
     };
   }, [rows]);
 
@@ -299,8 +541,12 @@ useEffect(() => {
     minDate,
     maxDate,
     metaFatCrmMensal,
+    metaByMonth,
     monthlyCrmRevenue,
     monthlyCrmOrders,
     siteMonthlyRevenue,
+    siteRevenueByMonth,
+    acoesSemCupomResumo,
+    acoesSemCupomByMonth,
   };
 }
