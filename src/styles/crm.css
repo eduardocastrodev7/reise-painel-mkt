@@ -1,0 +1,61 @@
+/* src/styles/crm.css */
+
+/* Container geral da página CRM */
+.crm-dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Seção de KPIs do CRM (10 cards) */
+.crm-dashboard-page .crm-kpi-section {
+  margin-top: 8px;
+}
+
+/* Grid dos cards – 2 linhas de 5 (responsivo) */
+.crm-dashboard-page .crm-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1440px) {
+  .crm-dashboard-page .crm-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  .crm-dashboard-page .crm-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .crm-dashboard-page .crm-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .crm-dashboard-page .crm-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tamanhos padrão pros charts/tabelas dentro do CRM (opcional) */
+.crm-dashboard-page .chart-wrapper {
+  margin-top: 8px;
+  width: 100%;
+  height: 280px;
+}
+
+.crm-dashboard-page .chart-wrapper.small-chart {
+  height: 260px;
+}
+
+.crm-dashboard-page .table-panel .table-wrapper {
+  margin-top: 8px;
+  max-height: 420px;
+  overflow: auto;
+}

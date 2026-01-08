@@ -1,0 +1,153 @@
+/* src/styles/kpi-dashboard.css
+ *
+ * Estilo padrão dos cards de KPI usados em:
+ * - Resultados Diários
+ * - Resultados CRM
+ */
+
+/* Container principal do card */
+.kpi-card {
+  position: relative;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px 20px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 120px;
+}
+
+/* Barrinha lateral fina, sempre laranja #ee731b */
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 3px; /* mais fina */
+  border-radius: 999px;
+  background: #ee731b;
+}
+
+/* Mesmo se tiver status, continua laranja */
+.kpi-card--good::before,
+.kpi-card--warn::before,
+.kpi-card--bad::before {
+  background: #ee731b;
+}
+
+/* Cabeçalho: título + ícone "i" */
+.kpi-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+/* Título pequeno, em cima */
+.kpi-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+/* Ícone de informação "i" com tooltip */
+.kpi-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kpi-info-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  font-size: 0.7rem;
+  color: #6b7280;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+/* Tooltip (aparece no hover) */
+.kpi-info:hover .kpi-info-tooltip {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.kpi-info-tooltip {
+  position: absolute;
+  top: 130%;
+  right: 0;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #111827;
+  color: #f9fafb;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 40;
+}
+
+/* Valor principal grande (ex.: R$ 876.314,27) */
+.kpi-value {
+  margin-top: 8px;
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.25;
+}
+
+/* Linha logo abaixo do valor (ex.: "Período selecionado.") */
+.kpi-subtitle {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+/* Linha de comparação (badge) */
+.kpi-comparison-line {
+  margin-top: 6px;
+  font-size: 0.78rem;
+}
+
+/* Badge de comparação (ex.: + 3,2% vs período anterior) */
+.comparison-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.comparison-badge--up {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.comparison-badge--down {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.comparison-badge--neutral {
+  background: #e5e7eb;
+  color: #374151;
+}
